@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nhạc Online</title>
+
+  <!-- TailwindCSS (CDN) – phù hợp cho đồ án; production nên build bằng Tailwind CLI -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            base: '#121212',
+            panel: '#181818',
+            raised: '#242424',
+            line: '#2e2e2e',
+            accent: '#1ed760',
+            muted: '#a7a7a7',
+          },
+          fontFamily: {
+            sans: ['"Be Vietnam Pro"', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body class="bg-black text-white font-sans h-screen overflow-hidden">
+  <!-- Bố cục: [sidebar | nội dung] ở trên, thanh phát nhạc cố định ở dưới -->
+  <div class="h-full flex flex-col">
+    <div class="flex-1 min-h-0 flex gap-2 p-2 pb-0">
+
+      <!-- ========== SIDEBAR ========== -->
+      <aside class="hidden md:flex w-72 shrink-0 flex-col gap-2">
+        <nav class="bg-panel rounded-lg p-4 flex flex-col gap-1">
+          <a href="#/" class="flex items-center gap-2 mb-3 text-xl font-extrabold">
+            <svg class="w-7 h-7 text-accent" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+            Nhạc Online
+          </a>
+          <a href="#/" data-nav="home" class="nav-link">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 3 10v11h6v-6h6v6h6V10l-9-7z"/></svg>Trang chủ
+          </a>
+          <a href="#/search" data-nav="search" class="nav-link">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Tìm kiếm
+          </a>
+          <a href="#/favorites" data-nav="favorites" class="nav-link">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8z"/></svg>Yêu thích
+          </a>
+          <a href="#/premium" data-nav="premium" class="nav-link">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3z"/></svg>Gói VIP
+          </a>
+          <a href="#/upload" data-nav="upload" class="nav-link">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 20h16"/></svg>Tải nhạc lên
+          </a>
+        </nav>
+
+        <section class="bg-panel rounded-lg flex-1 min-h-0 flex flex-col">
+          <div class="flex items-center justify-between px-4 pt-4 pb-2">
+            <h2 class="font-bold text-muted">Playlist của bạn</h2>
+            <button id="btn-new-playlist" title="Tạo playlist mới"
+              class="w-8 h-8 rounded-full grid place-items-center text-muted hover:text-white hover:bg-raised">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
+          <ul id="playlist-list" class="flex-1 overflow-y-auto scroll-thin px-2 pb-2"></ul>
+        </section>
+      </aside>
+
+      <!-- ========== NỘI DUNG CHÍNH ========== -->
+      <div class="flex-1 min-w-0 bg-panel rounded-lg flex flex-col">
+        <header class="shrink-0 flex items-center gap-3 px-4 md:px-6 py-3">
+          <!-- Điều hướng gọn cho màn hình nhỏ -->
+          <nav class="flex md:hidden gap-1 text-sm font-semibold">
+            <a href="#/" class="px-3 py-1.5 rounded-full bg-raised">Trang chủ</a>
+            <a href="#/playlists" class="px-3 py-1.5 rounded-full bg-raised">Playlist</a>
+            <a href="#/favorites" class="px-3 py-1.5 rounded-full bg-raised">Yêu thích</a>
+            <a href="#/premium" class="px-3 py-1.5 rounded-full bg-raised">VIP</a>
+            <a href="#/upload" class="px-3 py-1.5 rounded-full bg-raised">Tải lên</a>
+          </nav>
+          <div class="relative flex-1 max-w-md">
+            <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="search-input" type="search" autocomplete="off"
+              placeholder="Tìm bài hát, nghệ sĩ, album hoặc thể loại"
+              class="w-full bg-raised rounded-full pl-10 pr-4 py-2.5 text-sm placeholder-muted focus:outline-none focus:ring-2 focus:ring-white" />
+          </div>
+          <div id="account-area" class="shrink-0"></div>
+        </header>
+
+        <!-- Vùng này được vẽ lại khi chuyển trang; thanh phát nhạc nằm ngoài nên nhạc không bị ngắt -->
+        <main id="view" class="flex-1 min-h-0 overflow-y-auto scroll-thin px-4 md:px-6 pb-8"></main>
+      </div>
+    </div>
+
+    <!-- ========== PERSISTENT PLAYER ========== -->
+    <footer id="player" class="shrink-0 h-24 px-3 md:px-4 grid grid-cols-[1fr_auto] md:grid-cols-[1fr_2fr_1fr] items-center gap-3">
+      <!-- Bài đang phát -->
+      <div class="flex items-center gap-3 min-w-0">
+        <img id="np-cover" src="" alt="" class="w-14 h-14 rounded object-cover bg-raised hidden" />
+        <div id="np-empty" class="w-14 h-14 rounded bg-raised grid place-items-center text-muted">
+          <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+        </div>
+        <div class="min-w-0">
+          <p id="np-title" class="font-semibold truncate">Chưa chọn bài hát</p>
+          <a id="np-artist" href="#/" class="text-sm text-muted truncate block hover:underline">Chọn một bài để bắt đầu nghe</a>
+        </div>
+        <button id="np-add" title="Thêm vào playlist" class="hidden sm:grid w-9 h-9 rounded-full place-items-center text-muted hover:text-white shrink-0">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+        </button>
+      </div>
+
+      <!-- Điều khiển + thanh tiến trình -->
+      <div class="flex flex-col items-center gap-1.5 md:max-w-xl w-full">
+        <div class="flex items-center gap-3 md:gap-5">
+          <button id="btn-shuffle" title="Phát ngẫu nhiên" class="ctl hidden sm:grid">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+          </button>
+          <button id="btn-prev" title="Bài trước" class="ctl">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg>
+          </button>
+          <button id="btn-play" title="Phát / Tạm dừng" class="w-10 h-10 rounded-full bg-white text-black grid place-items-center hover:scale-105 transition-transform">
+            <svg id="ic-play" class="w-5 h-5 ml-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
+            <svg id="ic-pause" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+          </button>
+          <button id="btn-next" title="Bài tiếp theo" class="ctl">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg>
+          </button>
+          <a href="#/lyrics" title="Lời bài hát" aria-label="Mở lời bài hát" class="ctl grid">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 10h16M4 15h10M4 20h7"/></svg>
+          </a>
+          <button id="btn-repeat" title="Lặp lại" class="ctl hidden sm:grid relative">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></svg>
+            <span id="repeat-one" class="hidden absolute -top-1 -right-1 text-[10px] font-bold text-accent">1</span>
+          </button>
+        </div>
+        <canvas id="audio-visualizer" class="player-visualizer" aria-label="Sóng âm thanh đang phát"></canvas>
+        <div class="flex items-center gap-2 w-full">
+          <span id="time-cur" class="text-xs text-muted w-10 text-right tabular-nums">0:00</span>
+          <input id="progress" type="range" min="0" max="1000" value="0" step="1" class="range flex-1" aria-label="Tiến trình bài hát" />
+          <span id="time-dur" class="text-xs text-muted w-10 tabular-nums">0:00</span>
+        </div>
+      </div>
+
+      <!-- Âm lượng -->
+      <div class="hidden md:flex items-center justify-end gap-2">
+        <button id="btn-mute" title="Tắt / bật tiếng" class="ctl">
+          <svg id="ic-vol" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
+          <svg id="ic-mute" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.6 3 2.4-2.4-1.4-1.4-2.4 2.4-2.4-2.4-1.4 1.4 2.4 2.4-2.4 2.4 1.4 1.4 2.4-2.4 2.4 2.4 1.4-1.4z"/></svg>
+        </button>
+        <input id="volume" type="range" min="0" max="100" value="80" class="range w-28" aria-label="Âm lượng" />
+      </div>
+    </footer>
+  </div>
+
+  <!-- Phần tử audio duy nhất của ứng dụng, không bao giờ bị xóa khỏi DOM -->
+  <audio id="audio" preload="metadata"></audio>
+
+  <div id="modal-root"></div>
+  <div id="toast" class="center-notice-backdrop hidden" aria-hidden="true">
+    <div class="center-notice-card relative" role="status" aria-live="polite">
+      <button id="toast-close" class="absolute top-1 right-2 text-muted hover:text-white text-xl font-bold">&times;</button>
+      <span class="center-notice-icon" aria-hidden="true">♪</span>
+      <p id="toast-message" class="center-notice-message"></p>
+    </div>
+  </div>
+
+  <div id="support-widget">
+    <section id="support-panel" class="fixed bottom-24 right-4 z-40 hidden flex h-[min(34rem,calc(100dvh-8rem))] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-2xl sm:right-6" aria-label="Hỗ trợ khách hàng">
+      <header class="flex items-center justify-between border-b border-line p-4">
+        <div>
+          <h2 class="font-bold">Hỗ trợ khách hàng</h2>
+          <p id="support-status" class="text-xs text-muted" aria-live="polite">Bot hỗ trợ trực tuyến</p>
+        </div>
+        <button id="support-close" type="button" class="rounded-full px-3 py-1 text-muted hover:bg-raised hover:text-white" aria-label="Đóng hộp chat">Đóng</button>
+      </header>
+      <div id="support-messages" class="flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite"></div>
+      <div class="mx-4 mb-3 border border-line rounded-lg p-3 bg-raised">
+        <p class="text-xs font-semibold text-muted uppercase mb-2">Liên hệ trực tiếp Admin</p>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="w-5 h-5 rounded-full bg-accent text-black grid place-items-center text-[10px] font-bold">📞</span>
+          <span class="font-medium">Hotline: 0901 234 567</span>
+        </div>
+        <div class="flex items-center gap-2 text-sm mt-1">
+          <span class="w-5 h-5 rounded-full bg-accent text-black grid place-items-center text-[10px] font-bold">✉️</span>
+          <span class="font-medium">Email: support@musicapp.local</span>
+        </div>
+      </div>
+      <button id="support-connect" type="button" class="mx-4 mb-3 rounded-full border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-300/10">Kết nối chuyên viên trực tuyến</button>
+      <form id="support-form" class="flex gap-2 border-t border-line p-3">
+        <label class="sr-only" for="support-input">Tin nhắn hỗ trợ</label>
+        <input id="support-input" name="message" maxlength="2000" autocomplete="off" class="field min-w-0 flex-1" placeholder="Nhập tin nhắn…" required />
+        <button id="support-send" type="submit" class="rounded-full bg-accent px-4 py-2 font-bold text-black disabled:opacity-50">Gửi</button>
+      </form>
+    </section>
+    <button id="support-toggle" type="button" class="fixed bottom-6 right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-accent text-black shadow-xl transition hover:scale-105 sm:right-6" aria-expanded="false" aria-controls="support-panel" aria-label="Mở hỗ trợ khách hàng">
+      <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 3.9a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>
+    </button>
+  </div>
+
+  <script src="/app.js"></script>
+</body>O
+</html>

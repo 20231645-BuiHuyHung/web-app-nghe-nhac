@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quản trị – Nhạc Online</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { base: '#121212', panel: '#181818', raised: '#242424', line: '#333', accent: '#1ed760', muted: '#a7a7a7' } } } };
+  </script>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="min-h-screen bg-base text-white">
+  <header class="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-line bg-panel px-4 py-4 sm:px-8">
+    <div>
+      <h1 class="text-2xl font-extrabold">Bảng quản trị</h1>
+      <p id="admin-account" class="text-sm text-muted">Đang kiểm tra tài khoản…</p>
+    </div>
+    <nav class="flex gap-2">
+      <button type="button" data-admin-section-target="support" class="rounded-full border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-200 hover:bg-raised">Hỗ trợ khách hàng</button>
+      <a href="/" class="rounded-full border border-line px-4 py-2 text-sm font-semibold hover:bg-raised">Về trang nghe nhạc</a>
+      <button id="admin-logout" class="rounded-full bg-white px-4 py-2 text-sm font-bold text-black">Đăng xuất</button>
+    </nav>
+  </header>
+
+  <main class="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-8">
+    <div id="admin-message" class="center-notice-backdrop hidden" aria-hidden="true">
+      <div class="center-notice-card relative" role="status" aria-live="polite">
+        <button id="admin-message-close" class="absolute top-1 right-2 text-muted hover:text-white text-xl font-bold" aria-label="Đóng">&times;</button>
+        <span class="center-notice-icon" aria-hidden="true">♪</span>
+        <p id="admin-message-text" class="center-notice-message"></p>
+      </div>
+    </div>
+    <nav id="admin-section-nav" class="admin-section-nav" aria-label="Các mục quản trị">
+      <button type="button" class="admin-section-button active" data-admin-section-target="overview">Tổng quan</button>
+      <button type="button" class="admin-section-button" data-admin-section-target="revenue">Doanh thu</button>
+      <button type="button" class="admin-section-button" data-admin-section-target="create">Thêm bài hát / album</button>
+      <button type="button" class="admin-section-button" data-admin-section-target="genres">Thể loại</button>
+      <button type="button" class="admin-section-button" data-admin-section-target="songs">Bài hát</button>
+      <button type="button" class="admin-section-button" data-admin-section-target="albums">Album</button>
+      <button type="button" class="admin-section-button" data-admin-section-target="premium">Yêu cầu VIP</button>
+      <button type="button" class="admin-section-button" data-admin-section-target="support">Hỗ trợ</button>
+      <button type="button" class="admin-section-button" data-admin-section-target="users">Tài khoản</button>
+      <button type="button" class="admin-section-button" data-admin-section-target="password-resets">Đặt lại mật khẩu</button>
+    </nav>
+    <section data-admin-panel="overview">
+      <h2 class="mb-4 text-xl font-bold">Tổng quan</h2>
+      <div id="admin-stats" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"></div>
+      <div class="mt-4 rounded-xl bg-panel p-5">
+        <h3 class="mb-3 font-bold">Top bài hát theo lượt nghe</h3>
+        <ol id="top-songs" class="grid gap-2 text-sm text-muted sm:grid-cols-2"></ol>
+      </div>
+    </section>
+
+    <section data-admin-panel="revenue" class="hidden rounded-xl bg-panel p-5">
+      <div class="mb-5">
+        <h2 class="text-xl font-bold">Doanh thu VIP</h2>
+        <p class="mt-1 text-sm text-muted">Số liệu mô phỏng từ các yêu cầu VIP đã được duyệt, tính theo thời điểm duyệt. Chỉ phản ánh doanh thu ghi nhận trong hệ thống, không xác nhận giao dịch thanh toán thực tế.</p>
+      </div>
+      <div id="revenue-period-totals" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-live="polite"></div>
+      <div class="mt-6 rounded-xl border border-line p-4">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 class="font-bold">Doanh thu theo ngày — 14 ngày gần nhất</h3>
+          <p id="revenue-chart-total" class="text-sm text-muted"></p>
+        </div>
+        <div id="revenue-chart" class="revenue-chart" aria-label="Biểu đồ doanh thu VIP theo ngày"></div>
+      </div>
+      <div class="mt-6">
+        <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 class="font-bold">Chi tiết yêu cầu VIP đã duyệt</h3>
+            <p id="revenue-sales-caption" class="mt-1 text-sm text-muted"></p>
+          </div>
+          <label class="text-sm text-muted">Lọc thời gian
+            <select id="revenue-sales-period" class="field mt-1 py-2">
+              <option value="all">Toàn bộ lịch sử</option>
+              <option value="day">24 giờ qua</option>
+              <option value="week">7 ngày qua</option>
+              <option value="month">30 ngày qua</option>
+              <option value="halfYear">6 tháng qua</option>
+              <option value="year">12 tháng qua</option>
+            </select>
+          </label>
+        </div>
+        <div class="overflow-x-auto rounded-xl border border-line">
+          <table class="w-full min-w-[760px] text-left text-sm">
+            <thead class="bg-raised text-muted"><tr><th class="p-3">Tài khoản</th><th class="p-3">Email</th><th class="p-3">Gói VIP</th><th class="p-3">Giá</th><th class="p-3">Ngày duyệt</th></tr></thead>
+            <tbody id="revenue-sales-list"></tbody>
+          </table>
+        </div>
+        <div id="revenue-sales-pagination" class="mt-3"></div>
+      </div>
+      <p id="revenue-updated-at" class="mt-3 text-xs text-muted"></p>
+    </section>
+
+    <section data-admin-panel="create" class="hidden grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div class="rounded-xl bg-panel p-5">
+        <h2 class="text-xl font-bold">Thêm bài hát</h2>
+        <p class="mt-1 text-sm text-muted">Nhập URL audio công khai hoặc đường dẫn file đã upload.</p>
+        <form id="song-form" class="mt-4 grid gap-3 sm:grid-cols-2">
+          <label class="text-sm">Tên bài hát<input class="field mt-1" name="title" maxlength="150" required /></label>
+          <label class="text-sm">Nghệ sĩ<input class="field mt-1" name="artistName" maxlength="100" required /></label>
+          <label class="text-sm">Thể loại<input class="field mt-1" name="genre" maxlength="40" required /></label>
+          <label class="text-sm">Album<select class="field mt-1" name="albumId"><option value="">Không thuộc album</option></select></label>
+          <label class="text-sm sm:col-span-2">URL âm thanh<input class="field mt-1" name="audioUrl" type="url" placeholder="https://example.com/song.mp3" required /></label>
+          <label class="text-sm sm:col-span-2">URL ảnh bìa<input class="field mt-1" name="cover" type="url" /></label>
+          <label class="text-sm">Thời lượng (giây)<input class="field mt-1" name="duration" type="number" min="0" value="0" /></label>
+          <label class="flex items-center gap-2 text-sm"><input name="isVip" type="checkbox" class="h-4 w-4 accent-[#1ed760]" /> Đánh dấu bài hát VIP</label>
+          <label class="text-sm sm:col-span-2">Lời bài hát<textarea class="field mt-1" name="lyrics" rows="3" maxlength="50000"></textarea></label>
+          <button class="w-fit rounded-full bg-accent px-5 py-2 font-bold text-black">Thêm bài hát</button>
+        </form>
+      </div>
+      <div class="rounded-xl bg-panel p-5">
+        <h2 class="text-xl font-bold">Thêm album</h2>
+        <form id="album-form" class="mt-4 grid gap-3">
+          <label class="text-sm">Tên album<input class="field mt-1" name="title" maxlength="120" required /></label>
+          <label class="text-sm">Nghệ sĩ<select class="field mt-1" name="artistId" required></select></label>
+          <label class="text-sm">Năm phát hành<input class="field mt-1" name="year" type="number" min="1" max="9999" required /></label>
+          <label class="text-sm">URL ảnh bìa<input class="field mt-1" name="cover" type="url" /></label>
+          <button class="w-fit rounded-full bg-accent px-5 py-2 font-bold text-black">Thêm album</button>
+        </form>
+      </div>
+    </section>
+
+    <section data-admin-panel="genres" class="hidden rounded-xl bg-panel p-5">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div><h2 class="text-xl font-bold">Thể loại</h2><p class="text-sm text-muted">Hiển thị trước 5 thể loại được dùng gần đây nhất. Đổi tên thể loại sẽ cập nhật các bài hát liên quan.</p></div>
+        <form id="genre-form" class="flex gap-2"><input class="field" name="name" maxlength="40" placeholder="Tên thể loại mới" required /><button class="rounded-full bg-accent px-4 py-2 font-bold text-black">Thêm</button></form>
+      </div>
+      <div id="genre-list" class="mt-4 flex flex-wrap gap-2"></div>
+      <div id="genre-list-pagination" class="mt-4"></div>
+    </section>
+
+    <section data-admin-panel="songs" class="hidden rounded-xl bg-panel p-5">
+      <h2 class="text-xl font-bold">Quản lý bài hát</h2>
+      <p class="mb-4 mt-1 text-sm text-muted">Hiển thị trước 5 bài hát mới nhất; mỗi trang xem thêm tối đa 10 bài.</p>
+      <div class="overflow-x-auto"><table class="w-full min-w-[760px] text-left text-sm"><thead class="text-muted"><tr><th class="p-2">Bài hát</th><th class="p-2">Nghệ sĩ</th><th class="p-2">Thể loại</th><th class="p-2">Lượt nghe</th><th class="p-2">Gói VIP</th><th class="p-2">Thao tác</th></tr></thead><tbody id="song-list"></tbody></table></div>
+      <div id="song-list-pagination" class="mt-4"></div>
+    </section>
+
+    <section data-admin-panel="albums" class="hidden rounded-xl bg-panel p-5">
+      <h2 class="text-xl font-bold">Quản lý album</h2>
+      <p class="mb-4 mt-1 text-sm text-muted">Hiển thị trước 5 album mới nhất; mỗi trang xem thêm tối đa 10 album.</p>
+      <div class="overflow-x-auto"><table class="w-full min-w-[600px] text-left text-sm"><thead class="text-muted"><tr><th class="p-2">Album</th><th class="p-2">Nghệ sĩ</th><th class="p-2">Năm</th><th class="p-2">Thao tác</th></tr></thead><tbody id="album-list"></tbody></table></div>
+      <div id="album-list-pagination" class="mt-4"></div>
+    </section>
+
+    <section data-admin-panel="premium" class="hidden rounded-xl bg-panel p-5">
+      <h2 class="text-xl font-bold">Yêu cầu nâng cấp VIP</h2>
+      <p class="mb-4 mt-1 text-sm text-muted">Chỉ duyệt khi đã xác nhận thanh toán bên ngoài hệ thống. Chức năng thanh toán hiện chỉ dùng để demo.</p>
+      <p class="mb-4 -mt-2 text-sm text-muted">Hiển thị trước 5 yêu cầu mới nhất; mỗi trang xem thêm tối đa 10 yêu cầu.</p>
+      <div class="overflow-x-auto"><table class="w-full min-w-[900px] text-left text-sm"><thead class="text-muted"><tr><th class="p-2">Người dùng</th><th class="p-2">Email</th><th class="p-2">Gói</th><th class="p-2">Số tiền</th><th class="p-2">Ngày gửi</th><th class="p-2">Trạng thái</th><th class="p-2">Xử lý</th></tr></thead><tbody id="premium-request-list"></tbody></table></div>
+      <div id="premium-request-list-pagination" class="mt-4"></div>
+    </section>
+
+    <section id="support" data-admin-panel="support" class="hidden scroll-mt-24 rounded-xl bg-panel p-5">
+      <div class="mb-4">
+        <h2 class="text-xl font-bold">Hỗ trợ khách hàng</h2>
+        <p class="mt-1 text-sm text-muted">Tin nhắn được đồng bộ tự động mỗi vài giây. Chọn một cuộc trò chuyện để phản hồi.</p>
+      </div>
+      <div class="grid min-h-[28rem] gap-4 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.5fr)]">
+        <aside class="overflow-hidden rounded-xl border border-line">
+          <h3 class="border-b border-line px-4 py-3 font-semibold">Đang chờ / đang hỗ trợ</h3>
+          <ul id="support-conversations" class="max-h-[34rem] overflow-y-auto divide-y divide-line" aria-label="Danh sách cuộc trò chuyện"></ul>
+        </aside>
+        <section class="flex min-h-[28rem] flex-col overflow-hidden rounded-xl border border-line" aria-label="Tin nhắn khách hàng">
+          <header class="flex items-center justify-between gap-3 border-b border-line p-4">
+            <div class="min-w-0">
+              <h3 id="support-chat-title" class="truncate font-bold">Chọn cuộc trò chuyện</h3>
+              <p id="support-chat-status" class="truncate text-xs text-muted">Tin nhắn sẽ xuất hiện tại đây.</p>
+            </div>
+            <button id="support-close-conversation" type="button" class="hidden shrink-0 rounded-full border border-line px-3 py-1 text-sm hover:bg-raised">Kết thúc</button>
+          </header>
+          <div id="support-chat-messages" class="flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite">
+            <p class="text-sm text-muted">Chọn một khách hàng ở danh sách bên trái để xem tin nhắn.</p>
+          </div>
+          <form id="support-reply-form" class="flex gap-2 border-t border-line p-3">
+            <label class="sr-only" for="support-reply-input">Phản hồi khách hàng</label>
+            <input id="support-reply-input" name="message" maxlength="2000" autocomplete="off" class="field min-w-0 flex-1" placeholder="Chọn hội thoại trước…" required disabled />
+            <button id="support-reply-send" type="submit" class="rounded-full bg-accent px-4 py-2 font-bold text-black disabled:opacity-50" disabled>Gửi</button>
+          </form>
+        </section>
+      </div>
+    </section>
+
+    <section data-admin-panel="users" class="hidden rounded-xl bg-panel p-5">
+      <h2 class="mb-4 text-xl font-bold">Tài khoản và phân quyền</h2>
+      <p class="mb-3 text-sm text-muted">Không thể tự khóa hoặc tự hạ quyền tài khoản admin đang đăng nhập. Hệ thống luôn giữ ít nhất một admin hoạt động.</p>
+      <div class="overflow-x-auto"><table class="w-full min-w-[900px] text-left text-sm"><thead class="text-muted"><tr><th class="p-2">Tên</th><th class="p-2">Email</th><th class="p-2">Vai trò</th><th class="p-2">Trạng thái</th><th class="p-2">Gói cước</th><th class="p-2">Thao tác</th></tr></thead><tbody id="user-list"></tbody></table></div>
+    </section>
+
+    <section data-admin-panel="password-resets" class="hidden rounded-xl bg-panel p-5">
+      <h2 class="text-xl font-bold">Yêu cầu đặt lại mật khẩu</h2>
+      <p class="mb-4 mt-1 text-sm text-muted">Xác minh danh tính người dùng trước khi duyệt. Khi duyệt, link dùng một lần sẽ được tạo để Admin gửi riêng cho người dùng.</p>
+      <div class="overflow-x-auto"><table class="w-full min-w-[760px] text-left text-sm"><thead class="text-muted"><tr><th class="p-2">Tên</th><th class="p-2">Email</th><th class="p-2">Ngày gửi</th><th class="p-2">Trạng thái</th><th class="p-2">Thao tác</th></tr></thead><tbody id="password-reset-request-list"></tbody></table></div>
+    </section>
+  </main>
+  <dialog id="admin-confirm-dialog" class="app-dialog">
+    <form method="dialog" class="app-dialog-card">
+      <span id="admin-confirm-icon" class="center-notice-icon" aria-hidden="true">?</span>
+      <h2 id="admin-confirm-title" class="mt-4 text-xl font-bold">Xác nhận thao tác</h2>
+      <p id="admin-confirm-message" class="mt-2 text-sm leading-6 text-muted"></p>
+      <div class="mt-6 flex justify-end gap-3">
+        <button id="admin-confirm-cancel" value="cancel" class="rounded-full border border-line px-5 py-2 font-semibold hover:bg-panel">Hủy</button>
+        <button id="admin-confirm-accept" value="confirm" class="rounded-full bg-accent px-5 py-2 font-bold text-black hover:brightness-110">Xác nhận</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="password-reset-result" class="w-[min(92vw,36rem)] rounded-2xl border border-line bg-raised p-0 text-white shadow-2xl backdrop:bg-black/70">
+    <section class="p-6">
+      <h2 id="password-reset-result-title" class="text-xl font-bold">Kết quả yêu cầu</h2>
+      <p id="password-reset-result-message" class="mt-2 text-sm text-muted"></p>
+      <label id="password-reset-link-label" for="password-reset-link" class="mt-5 block text-sm font-semibold">Link gửi riêng cho người dùng</label>
+      <input id="password-reset-link" class="field mt-2 w-full" readonly />
+      <p id="password-reset-link-help" class="mt-2 text-xs text-muted">Link dùng một lần, hết hạn sau 30 phút. Đặt mật khẩu không tự xảy ra khi Admin duyệt.</p>
+      <p id="password-reset-copy-status" class="mt-2 min-h-5 text-sm text-accent" aria-live="polite"></p>
+      <div class="mt-5 flex justify-end gap-2">
+        <button id="password-reset-copy" type="button" class="rounded-full bg-accent px-4 py-2 font-bold text-black">Sao chép link</button>
+        <button id="password-reset-result-close" type="button" class="rounded-full border border-line px-4 py-2 hover:bg-panel">Đóng</button>
+      </div>
+    </section>
+  </dialog>
+  <script src="/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,190 @@
+{
+  "artists": [
+    {
+      "id": 1,
+      "name": "Helix Orchestra",
+      "bio": "Nhóm nhạc điện tử – giao hưởng với những bản phối nhiều lớp.",
+      "avatar": "https://picsum.photos/seed/helix-orchestra/400/400"
+    },
+    {
+      "id": 2,
+      "name": "Neon Pulse",
+      "bio": "Dự án EDM và synthwave với nhịp điệu mạnh.",
+      "avatar": "https://picsum.photos/seed/neon-pulse/400/400"
+    },
+    {
+      "id": 3,
+      "name": "Lofi Garden",
+      "bio": "Nhạc chill, lofi nhẹ nhàng để học và làm việc.",
+      "avatar": "https://picsum.photos/seed/lofi-garden/400/400"
+    },
+    {
+      "id": 4,
+      "name": "zzz",
+      "bio": "",
+      "avatar": "https://picsum.photos/seed/artist-zzz/400/400"
+    }
+  ],
+  "albums": [
+    {
+      "id": 1,
+      "title": "Morning Circuits",
+      "artistId": 1,
+      "year": 2023,
+      "cover": "https://picsum.photos/seed/morning-circuits/400/400"
+    },
+    {
+      "id": 2,
+      "title": "Night Drive",
+      "artistId": 2,
+      "year": 2024,
+      "cover": "https://picsum.photos/seed/night-drive/400/400"
+    },
+    {
+      "id": 3,
+      "title": "Rainy Study Session",
+      "artistId": 3,
+      "year": 2022,
+      "cover": "https://picsum.photos/seed/rainy-study/400/400"
+    }
+  ],
+  "songs": [
+    {
+      "id": 1,
+      "title": "Sunrise Algorithm",
+      "artistId": 1,
+      "albumId": 1,
+      "genre": "Electronic",
+      "duration": 372,
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+      "cover": "https://picsum.photos/seed/morning-circuits/400/400",
+      "plays": 3
+    },
+    {
+      "id": 2,
+      "title": "Binary Breeze",
+      "artistId": 1,
+      "albumId": 1,
+      "genre": "Electronic",
+      "duration": 425,
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+      "cover": "https://picsum.photos/seed/morning-circuits/400/400",
+      "plays": 1
+    },
+    {
+      "id": 3,
+      "title": "Neon Highway",
+      "artistId": 2,
+      "albumId": 2,
+      "genre": "EDM",
+      "duration": 344,
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+      "cover": "https://picsum.photos/seed/night-drive/400/400",
+      "plays": 1
+    },
+    {
+      "id": 4,
+      "title": "Midnight Overdrive",
+      "artistId": 2,
+      "albumId": 2,
+      "genre": "EDM",
+      "duration": 305,
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+      "cover": "https://picsum.photos/seed/night-drive/400/400",
+      "plays": 2
+    },
+    {
+      "id": 5,
+      "title": "Window Raindrops",
+      "artistId": 3,
+      "albumId": 3,
+      "genre": "Lofi",
+      "duration": 355,
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+      "cover": "https://picsum.photos/seed/rainy-study/400/400",
+      "plays": 0
+    },
+    {
+      "id": 6,
+      "title": "Coffee & Notes",
+      "artistId": 3,
+      "albumId": 3,
+      "genre": "Lofi",
+      "duration": 344,
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+      "cover": "https://picsum.photos/seed/rainy-study/400/400",
+      "plays": 0
+    },
+    {
+      "id": 7,
+      "title": "Late Library",
+      "artistId": 3,
+      "albumId": 3,
+      "genre": "Lofi",
+      "duration": 340,
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
+      "cover": "https://picsum.photos/seed/rainy-study/400/400",
+      "plays": 0
+    },
+    {
+      "id": 8,
+      "title": "Afterglow",
+      "artistId": 2,
+      "albumId": null,
+      "genre": "Synthwave",
+      "duration": 328,
+      "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+      "cover": "https://picsum.photos/seed/afterglow/400/400",
+      "plays": 0
+    },
+    {
+      "id": 9,
+      "title": "Sau Này Em Cưới Ai Rồi Remix (Bản Hot TikTok) - Kiều Chi ♫ Sau Này Anh Cưới Ai Rồi Bỏ Lại Em Bơ Vơ - (320 Kbps)",
+      "artistId": 4,
+      "albumId": null,
+      "genre": "Khác",
+      "duration": 330,
+      "audioUrl": "/uploads/audio/1791971473845-356036.mp3",
+      "cover": "https://picsum.photos/seed/song-1791971473924/400/400",
+      "plays": 3
+    }
+  ],
+  "playlists": [
+    {
+      "id": 1,
+      "name": "Học bài buổi tối",
+      "songIds": [
+        5,
+        6,
+        7
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "name": "admin",
+      "email": "20231645@eaut.edu.vn",
+      "passwordHash": "cec61d9c345437b77bc103a3833950d1ff58389821bdc60c892ae95b2da5e90151f052846636631cdd4310efb14c7ddd2562082caea89ed7f7976a6053638a58",
+      "passwordSalt": "7767fb5e9cc6f798e364b8ada7ef96a3",
+      "role": "admin",
+      "status": "active"
+    },
+    {
+      "id": 2,
+      "name": "n1",
+      "email": "ba1@gmail.com",
+      "passwordHash": "89cdda872535500d950136956f1fb0fde06ad32b7de244177e59b5d9eb00adcf34cb6a4f1cbc531a195b1bb0bcea154e85990ee518f0a831e584e33ae289673f",
+      "passwordSalt": "4b3c3899c1b835cc69e947269ab9d415",
+      "role": "user",
+      "status": "active"
+    }
+  ],
+  "genres": [
+    "Electronic",
+    "EDM",
+    "Lofi",
+    "Synthwave",
+    "Khác"
+  ]
+}

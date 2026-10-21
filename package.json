@@ -1,0 +1,23 @@
+{
+  "name": "music-app",
+  "version": "1.0.0",
+  "description": "Đồ án chuyên ngành CNPM - Web nghe nhạc trực tuyến (Mã đề 6)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed": "node seed.js",
+    "make-admin": "node scripts/promote-admin.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.0.2",
+    "emailjs": "^5.0.3",
+    "sql.js": "^1.13.0"
+  }
+}
