@@ -39,7 +39,7 @@
   async function api(url, options) {
     const res = await fetch(url, options);
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || 'Có lỗi xảy ra, vui lòng thử lại');
+    if (!res.ok) throw new Error(data.error || `Yêu cầu ${url} thất bại (HTTP ${res.status})`);
     return data;
   }
 
@@ -127,6 +127,8 @@
     favorites: new Set(),
     user: null,
     premiumRequests: [],
+    paymentConfig: null,
+    paymentConfigError: null,
     queue: [], // hàng đợi đang phát
     index: -1, // vị trí bài hiện tại trong queue
     history: [], // lịch sử vị trí khi bật shuffle (để nút Previous hoạt động)
@@ -206,6 +208,10 @@
     const connect = $('#support-connect');
     const input = $('#support-input');
     if (!status || !connect || !input) return;
+    connect.classList.toggle(
+      'hidden',
+      supportState.mode === 'live' && supportState.conversation?.status !== 'closed'
+    );
     if (supportState.mode === 'bot') {
       status.textContent = 'Bot hỗ trợ tự động';
       connect.textContent = 'Kết nối chuyên viên trực tuyến';
@@ -322,9 +328,9 @@
       return 'Dùng nút Đăng nhập ở góc trên để đăng nhập hoặc tạo tài khoản mới. Không gửi mật khẩu trong khung chat này nhé.';
     }
     if (/lien he|hotline|so dien thoai|email admin|lien lac|tro giup/.test(normalized)) {
-      return 'Bạn có thể liên hệ trực tiếp Admin qua số điện thoại 0901 234 567 hoặc email support@musicapp.local. Ngoài ra, hãy bấm “Kết nối chuyên viên trực tuyến” để được hỗ trợ ngay trong ứng dụng.';
+      return 'Hãy bấm “Kết nối chuyên viên trực tuyến” để được hỗ trợ ngay trong ứng dụng.';
     }
-    return 'Mình có thể hướng dẫn cách nghe nhạc, xử lý lỗi phát, tạo playlist và gói VIP. Nếu cần hỗ trợ trực tiếp, hãy bấm “Kết nối chuyên viên trực tuyến” hoặc xem mục liên hệ Admin trong khung chat.';
+    return 'Mình có thể hướng dẫn cách nghe nhạc, xử lý lỗi phát, tạo playlist và gói VIP. Nếu cần hỗ trợ trực tiếp, hãy bấm “Kết nối chuyên viên trực tuyến”.';
   }
 
   async function connectSupportAgent() {
@@ -377,12 +383,52 @@
     const toggle = $('#support-toggle');
     const form = $('#support-form');
     const input = $('#support-input');
+    let dragStart = null;
+    let suppressNextToggle = false;
+
+    toggle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      const rect = toggle.getBoundingClientRect();
+      dragStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top, moved: false };
+      toggle.setPointerCapture(event.pointerId);
+    });
+    toggle.addEventListener('pointermove', (event) => {
+      if (!dragStart || event.pointerId !== dragStart.pointerId) return;
+      const dx = event.clientX - dragStart.x;
+      const dy = event.clientY - dragStart.y;
+      if (!dragStart.moved && Math.hypot(dx, dy) < 6) return;
+      dragStart.moved = true;
+      const rect = toggle.getBoundingClientRect();
+      const left = Math.max(0, Math.min(window.innerWidth - rect.width, dragStart.left + dx));
+      const top = Math.max(0, Math.min(window.innerHeight - rect.height, dragStart.top + dy));
+      toggle.style.left = `${left}px`;
+      toggle.style.top = `${top}px`;
+      toggle.style.right = 'auto';
+      toggle.style.bottom = 'auto';
+    });
+    const finishDrag = (event) => {
+      if (!dragStart || event.pointerId !== dragStart.pointerId) return;
+      suppressNextToggle = dragStart.moved;
+      dragStart = null;
+    };
+    toggle.addEventListener('pointerup', finishDrag);
+    toggle.addEventListener('pointercancel', (event) => {
+      if (dragStart && event.pointerId === dragStart.pointerId) {
+        dragStart = null;
+        suppressNextToggle = false;
+      }
+    });
+
     const close = () => {
       supportState.open = false;
       panel.classList.add('hidden');
       toggle.setAttribute('aria-expanded', 'false');
     };
     toggle.addEventListener('click', async () => {
+      if (suppressNextToggle) {
+        suppressNextToggle = false;
+        return;
+      }
       supportState.open = !supportState.open;
       panel.classList.toggle('hidden', !supportState.open);
       toggle.setAttribute('aria-expanded', String(supportState.open));
@@ -419,14 +465,21 @@
   }
 
   async function loadAll() {
-    const [songs, albums, artists, genres, playlists, auth] = await Promise.all([
-      api('/api/songs'),
-      api('/api/albums'),
-      api('/api/artists'),
-      api('/api/genres'),
-      api('/api/playlists'),
-      api('/api/auth/me'),
+    const [coreData, paymentResult] = await Promise.all([
+      Promise.all([
+        api('/api/songs'),
+        api('/api/albums'),
+        api('/api/artists'),
+        api('/api/genres'),
+        api('/api/playlists'),
+        api('/api/auth/me'),
+      ]),
+      api('/api/payments/vnpay/config').then(
+        (paymentConfig) => ({ paymentConfig, error: null }),
+        (error) => ({ paymentConfig: null, error })
+      ),
     ]);
+    const [songs, albums, artists, genres, playlists, auth] = coreData;
     const [favorites, premiumRequests] = auth.user
       ? await Promise.all([api('/api/favorites'), api('/api/premium/requests')])
       : [[], []];
@@ -434,6 +487,8 @@
       songs, albums, artists, genres, playlists, user: auth.user,
       favorites: new Set(favorites.map((song) => song.id)),
       premiumRequests,
+      paymentConfig: paymentResult.paymentConfig,
+      paymentConfigError: paymentResult.error?.message || null,
     });
     renderAccountArea();
   }
@@ -471,6 +526,7 @@
       state.user = auth.user;
       state.premiumRequests = premiumRequests;
       const vipJustActivated = !hasPremiumAccess(previousUser) && hasPremiumAccess(auth.user);
+      const vipAccessChanged = hasPremiumAccess(previousUser) !== hasPremiumAccess(auth.user);
       const changedRequest = premiumRequests.find((request) =>
         previousRequests.has(request.id) &&
         previousRequests.get(request.id) !== request.status &&
@@ -478,15 +534,23 @@
       );
       if (accountChanged) renderAccountArea();
       updateSupportHotlineDisplay();
-      if (vipJustActivated) {
+      if (vipJustActivated && changedRequest?.payment?.status === 'paid') {
+        toast('VNPay xác nhận thành công. VIP đã được kích hoạt!');
+      } else if (vipJustActivated) {
         toast('Yêu cầu đã được duyệt. VIP đã kích hoạt!');
       } else if (changedRequest) {
-        toast(changedRequest.status === 'approved'
-          ? 'Yêu cầu VIP đã được Admin duyệt.'
-          : 'Yêu cầu VIP đã bị từ chối.');
+        toast(changedRequest.payment?.status === 'paid'
+          ? 'VNPay xác nhận thành công. Gói VIP đã được gia hạn.'
+          : changedRequest.payment?.status === 'failed'
+            ? 'Giao dịch VNPay thất bại. Bạn có thể thử thanh toán lại.'
+            : changedRequest.status === 'approved'
+              ? 'Yêu cầu VIP đã được Admin duyệt.'
+              : 'Yêu cầu VIP đã bị từ chối.');
       }
-      if (vipJustActivated || changedRequest || requestsChanged) {
-        if (location.hash.startsWith('#/premium')) viewPremium();
+      if (vipAccessChanged || changedRequest || requestsChanged) {
+        if (location.hash.startsWith('#/premium/payment/')) await route();
+        else if (location.hash.startsWith('#/premium')) viewPremium();
+        else if (location.hash.startsWith('#/vip')) await route();
       }
       accountStatusPollErrorShown = false;
     } catch (error) {
@@ -1251,12 +1315,20 @@
     const topSongs = state.songs.slice()
       .sort((a, b) => (b.plays || 0) - (a.plays || 0) || b.id - a.id)
       .slice(0, 5);
+    const topSongIds = new Set(topSongs.map((song) => song.id));
+    const trendingSongs = [
+      ...topSongs,
+      ...state.songs
+        .filter((song) => song.isTrending && !topSongIds.has(song.id))
+        .sort((a, b) => (b.plays || 0) - (a.plays || 0) || b.id - a.id),
+    ];
     view.innerHTML = `
       <h1 class="text-3xl font-extrabold pt-2">${greet}</h1>
       ${sectionTitle('Bài hát mới')}
       ${newestSongs.length ? songTable(newestSongs, { listKey: 'newest' }) : emptyState('Chưa có bài hát', '')}
-      ${sectionTitle('Bảng xếp hạng nghe nhiều')}
-      ${topSongs.length ? songTable(topSongs, { listKey: 'top' }) : emptyState('Chưa có lượt nghe', '')}
+      ${sectionTitle('Đang thịnh hành')}
+      <p class="mb-3 text-sm text-muted">Top 5 theo lượt nghe cùng các bài do Admin đề cử.</p>
+      ${trendingSongs.length ? songTable(trendingSongs, { listKey: 'trending' }) : emptyState('Chưa có bài thịnh hành', '')}
       ${sectionTitle('Album')}
       <div class="${gridClass}">${state.albums.map(albumCard).join('')}</div>
       ${sectionTitle('Nghệ sĩ')}
@@ -1279,6 +1351,50 @@
         : emptyState('Chưa có bài hát yêu thích', state.user
           ? 'Nhấn biểu tượng trái tim ở một bài hát để lưu vào đây.'
           : 'Đăng nhập để lưu bài hát yêu thích của bạn.')}`;
+  }
+
+  async function viewVipLibrary() {
+    state.viewCtx = {};
+    state.viewSongs = [];
+    if (!hasPremiumAccess()) {
+      view.innerHTML = `
+        <section class="mx-auto max-w-3xl py-12 text-center">
+          <span class="inline-flex rounded-full bg-amber-300 px-3 py-1 text-xs font-extrabold tracking-widest text-black">KHO NHẠC VIP</span>
+          <h1 class="mt-4 text-3xl font-extrabold">Nội dung dành riêng cho thành viên VIP</h1>
+          <p class="mx-auto mt-3 max-w-xl text-muted">${state.user
+            ? 'Gói VIP của bạn chưa hoạt động hoặc đã hết hạn. Chọn gói phù hợp để mở khóa kho nhạc VIP.'
+            : 'Đăng nhập bằng tài khoản đang có gói VIP để truy cập kho nhạc và các đặc quyền.'}</p>
+          <div class="mt-6 flex flex-wrap justify-center gap-3">
+            ${state.user
+              ? ''
+              : '<a href="#/auth/login" class="rounded-full bg-white px-5 py-3 font-bold text-black">Đăng nhập</a>'}
+            <a href="#/premium" class="rounded-full bg-amber-300 px-5 py-3 font-bold text-black">Xem các gói VIP</a>
+          </div>
+        </section>`;
+      return;
+    }
+
+    const songs = await api('/api/premium/songs');
+    state.viewSongs = songs;
+    view.innerHTML = `
+      <section class="pt-4">
+        <div class="rounded-2xl border border-amber-300/30 bg-gradient-to-br from-amber-300/10 to-transparent p-5 sm:p-8">
+          <span class="inline-flex rounded-full bg-amber-300 px-3 py-1 text-xs font-extrabold tracking-widest text-black">THÀNH VIÊN PRO</span>
+          <h1 class="mt-3 text-3xl font-extrabold sm:text-4xl">Kho nhạc VIP</h1>
+          <p class="mt-2 text-muted">Toàn bộ bài hát dành riêng cho tài khoản có gói VIP còn hạn.</p>
+          <div class="mt-5 grid gap-3 sm:grid-cols-2">
+            <p class="rounded-xl border border-line bg-panel/70 p-4 font-semibold">Nghe các bài hát được đánh dấu VIP</p>
+            <p class="rounded-xl border border-line bg-panel/70 p-4 font-semibold">Truy cập kho nhạc VIP riêng</p>
+          </div>
+          <div class="mt-5 flex items-center gap-4">
+            ${songs.length ? playButton() : ''}
+            <p class="text-sm text-muted">${songs.length} bài hát VIP</p>
+          </div>
+        </div>
+        ${songs.length
+          ? songTable(songs, { listKey: 'vip-library' })
+          : emptyState('Chưa có bài hát VIP', 'Các bài hát được Admin đánh dấu VIP sẽ xuất hiện tại đây.')}
+      </section>`;
   }
 
   const premiumPlans = {
@@ -1375,6 +1491,8 @@
     const pendingRequest = state.premiumRequests.find((request) => request.status === 'pending');
     if (pendingRequest) state.selectedPremiumPlan = pendingRequest.plan;
     const selected = premiumPlans[state.selectedPremiumPlan] || premiumPlans.month;
+    const vnpayEnabled = state.paymentConfig?.enabled === true;
+    const paymentConfigUnavailable = Boolean(state.paymentConfigError);
     view.innerHTML = `
       <section class="mx-auto max-w-5xl pt-4">
         <div class="text-center">
@@ -1385,7 +1503,7 @@
             ? `<p class="mt-3 font-semibold text-amber-200">Tài khoản đang là VIP${state.user.premiumExpiresAt ? ` đến ${esc(new Date(state.user.premiumExpiresAt).toLocaleDateString('vi-VN'))}` : ''}.</p>`
             : ''}
           ${pendingRequest
-            ? `<p class="mt-3 rounded-lg border border-amber-300/40 bg-amber-300/10 p-3 text-amber-100">Yêu cầu ${esc(premiumPlans[pendingRequest.plan]?.name || pendingRequest.plan)} đang chờ Admin duyệt. Tài khoản chưa được nâng cấp.</p>`
+            ? `<p class="mt-3 rounded-lg border border-amber-300/40 bg-amber-300/10 p-3 text-amber-100">${pendingRequest.payment?.status === 'pending' ? 'Giao dịch VNPay đang chờ xác nhận.' : 'Yêu cầu đang chờ Admin duyệt.'} Tài khoản chưa được nâng cấp.</p>`
             : ''}
         </div>
         <div class="mt-8 grid gap-4 md:grid-cols-3">
@@ -1398,20 +1516,45 @@
         </div>
         <div class="mt-6 grid gap-6 rounded-2xl border border-line bg-panel p-5 md:grid-cols-[1fr_auto] md:items-center md:p-8">
           <div>
-            <h2 class="text-2xl font-bold">Thanh toán mô phỏng · ${esc(selected.name)}</h2>
-            <p class="mt-2 text-muted">Mã QR minh họa MoMo/VietQR — không chứa thông tin thanh toán và không thể quét chuyển tiền.</p>
-            <p class="mt-3 text-sm text-muted">Đây là quy trình demo: không có giao dịch tiền thật. Sau khi gửi yêu cầu, Admin cần duyệt thì VIP mới được kích hoạt.</p>
+            <h2 class="text-2xl font-bold">${paymentConfigUnavailable
+              ? 'Phương thức thanh toán tạm thời không khả dụng'
+              : vnpayEnabled ? `VNPay Sandbox · ${esc(selected.name)}` : `Thanh toán mô phỏng · ${esc(selected.name)}`}</h2>
+            <p class="mt-2 text-muted">${paymentConfigUnavailable
+              ? `Không thể xác minh cấu hình thanh toán: ${esc(state.paymentConfigError)}. Vui lòng tải lại trang hoặc liên hệ Admin.`
+              : vnpayEnabled
+              ? 'Bạn sẽ được chuyển sang môi trường thử nghiệm VNPay. Không dùng thẻ thật; VIP chỉ kích hoạt sau khi máy chủ xác minh IPN.'
+              : 'Mã QR minh họa MoMo/VietQR — không chứa thông tin thanh toán và không thể quét chuyển tiền.'}</p>
+            ${paymentConfigUnavailable ? '' : `<p class="mt-3 text-sm text-muted">${vnpayEnabled
+              ? 'Sandbox không thu tiền thật. Đơn hàng, mã tham chiếu và kết quả VNPay sẽ được lưu trong hệ thống để Admin đối soát.'
+              : 'Đây là quy trình demo: không có giao dịch tiền thật. Sau khi gửi yêu cầu, Admin cần duyệt thì VIP mới được kích hoạt.'}</p>`}
             ${pendingRequest
-              ? '<button class="mt-5 cursor-not-allowed rounded-full bg-raised px-6 py-3 font-bold text-muted" disabled>Đang chờ Admin duyệt</button>'
+              ? `<div class="mt-5 flex flex-wrap items-center gap-3">
+                  <button class="cursor-not-allowed rounded-full bg-raised px-6 py-3 font-bold text-muted" disabled>${pendingRequest.payment?.status === 'pending' ? 'Đang chờ VNPay xác nhận' : 'Đang chờ Admin duyệt'}</button>
+                  ${pendingRequest.payment?.status === 'pending'
+                    ? `<button type="button" data-action="refresh-premium-payment" data-txn-ref="${esc(pendingRequest.payment.txnRef)}" class="rounded-full border border-line px-5 py-3 font-semibold hover:bg-raised">Kiểm tra giao dịch</button>`
+                    : ''}
+                </div>`
               : state.user
-              ? `<button data-action="upgrade-premium" class="mt-5 rounded-full bg-amber-300 px-6 py-3 font-extrabold text-black hover:brightness-110">Gửi yêu cầu nâng cấp</button>`
+              ? paymentConfigUnavailable
+                ? '<button class="mt-5 cursor-not-allowed rounded-full bg-raised px-6 py-3 font-bold text-muted" disabled>Chưa thể xác minh thanh toán</button>'
+                : `<button data-action="${vnpayEnabled ? 'checkout-premium' : 'upgrade-premium'}" class="mt-5 rounded-full bg-amber-300 px-6 py-3 font-extrabold text-black hover:brightness-110">${vnpayEnabled ? 'Thanh toán thử qua VNPay' : 'Gửi yêu cầu nâng cấp'}</button>`
               : '<a href="#/auth/login" class="mt-5 inline-block rounded-full bg-amber-300 px-6 py-3 font-extrabold text-black">Đăng nhập để nâng cấp</a>'}
             <p id="premium-message" class="mt-3 text-sm text-muted" role="status"></p>
           </div>
-          <div class="grid justify-items-center gap-2 rounded-xl bg-white p-3 text-center text-xs font-semibold text-gray-600">
-            ${mockQrCode()}
-            <span>QR DEMO — KHÔNG THANH TOÁN</span>
-          </div>
+          ${vnpayEnabled ? `
+            <div class="grid justify-items-center gap-2 rounded-xl border border-amber-300/30 p-5 text-center text-sm">
+              <span class="rounded-full bg-amber-300 px-3 py-1 font-extrabold text-black">VNPAY SANDBOX</span>
+              <span class="text-muted">Thanh toán được xử lý trên trang VNPay thử nghiệm.</span>
+              <span class="text-xs text-muted">Không nhập thông tin thẻ thật.</span>
+            </div>` : paymentConfigUnavailable ? `
+            <div class="grid justify-items-center gap-2 rounded-xl border border-red-400/30 p-5 text-center text-sm text-red-200" role="alert">
+              <span>Chưa xác minh được trạng thái cổng thanh toán.</span>
+              <span class="text-xs">Không gửi yêu cầu thanh toán lúc này.</span>
+            </div>` : `
+            <div class="grid justify-items-center gap-2 rounded-xl bg-white p-3 text-center text-xs font-semibold text-gray-600">
+              ${mockQrCode()}
+              <span>QR DEMO — KHÔNG THANH TOÁN</span>
+            </div>`}
         </div>
         ${state.premiumRequests.length ? `
           <section class="mt-8">
@@ -1423,12 +1566,88 @@
                   <tr class="border-t border-line">
                     <td class="p-3">${esc(premiumPlans[request.plan]?.name || request.plan)} · ${Number(request.price).toLocaleString('vi-VN')}đ</td>
                     <td class="p-3">${esc(new Date(request.createdAt).toLocaleString('vi-VN'))}</td>
-                    <td class="p-3">${request.status === 'pending' ? 'Chờ duyệt' : request.status === 'approved' ? 'Đã duyệt' : 'Từ chối'}</td>
+                    <td class="p-3">${request.payment
+                      ? `${request.payment.status === 'pending' ? 'Chờ VNPay' : request.payment.status === 'expired' ? 'Đơn hết hạn, chưa hoàn tất' : request.payment.status === 'paid' ? 'Đã thanh toán Sandbox' : 'Thanh toán thất bại'} · ${esc(request.payment.txnRef)}`
+                      : request.status === 'pending' ? 'Chờ duyệt' : request.status === 'approved' ? 'Đã duyệt' : 'Từ chối'}</td>
                   </tr>`).join('')}</tbody>
               </table>
             </div>
           </section>` : ''}
       </section>`;
+  }
+
+  async function viewPremiumPayment(txnRef) {
+    if (!requireAccount()) return;
+    state.viewCtx = {};
+    view.innerHTML = '<p class="py-16 text-center text-muted">Đang kiểm tra giao dịch VNPay…</p>';
+    let queryError = '';
+    try {
+      await api(`/api/premium/payments/${encodeURIComponent(txnRef)}/check`, { method: 'POST' });
+    } catch (error) {
+      queryError = error.message;
+    }
+    let payment = await api(`/api/premium/payments/${encodeURIComponent(txnRef)}`);
+    const expectedHash = `#/premium/payment/${encodeURIComponent(txnRef)}`;
+    for (let attempt = 0; payment.status === 'pending' && attempt < 6; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      if (location.hash !== expectedHash) return;
+      payment = await api(`/api/premium/payments/${encodeURIComponent(txnRef)}`);
+    }
+
+    if (payment.status === 'paid' && payment.vipActivated) {
+      const [auth, premiumRequests] = await Promise.all([
+        api('/api/auth/me'),
+        api('/api/premium/requests'),
+      ]);
+      state.user = auth.user;
+      state.premiumRequests = premiumRequests;
+      renderAccountArea();
+    }
+
+    const statusLabels = {
+      pending: 'Đang chờ IPN xác nhận',
+      expired: 'Đơn đã hết hạn — chưa nhận được xác nhận thanh toán',
+      paid: payment.vipActivated ? 'Đã thanh toán và kích hoạt VIP' : 'Đã thanh toán — cần Admin đối soát quyền VIP',
+      failed: 'Giao dịch thất bại',
+    };
+    const amount = Number(payment.amount).toLocaleString('vi-VN');
+    view.innerHTML = `
+      <section class="mx-auto max-w-3xl py-10">
+        <div class="rounded-2xl border border-line bg-panel p-6 sm:p-8">
+          <p class="text-sm font-bold uppercase tracking-widest text-accent">VNPay Sandbox</p>
+          <h1 class="mt-2 text-2xl font-extrabold">${esc(statusLabels[payment.status] || payment.status)}</h1>
+          <p class="mt-2 text-muted">Đây là giao dịch thử nghiệm, không phát sinh thanh toán tiền thật.</p>
+          ${queryError ? `<p role="alert" class="mt-3 text-sm text-red-400">${esc(queryError)}</p>` : ''}
+          <dl class="mt-6 grid gap-3 text-sm sm:grid-cols-2">
+            <div><dt class="text-muted">Mã đơn hàng (vnp_TxnRef)</dt><dd class="break-words font-semibold">${esc(payment.txnRef)}</dd></div>
+            <div><dt class="text-muted">Gói</dt><dd class="font-semibold">${esc(premiumPlans[payment.plan]?.name || payment.plan)}</dd></div>
+            <div><dt class="text-muted">Số tiền</dt><dd class="font-semibold">${amount} ${esc(payment.currency)}</dd></div>
+            <div><dt class="text-muted">Mã giao dịch VNPay</dt><dd class="break-words font-semibold">${esc(payment.transactionNo || 'Chưa có')}</dd></div>
+            <div><dt class="text-muted">Ngân hàng / loại thẻ</dt><dd class="font-semibold">${esc([payment.bankCode, payment.cardType].filter(Boolean).join(' / ') || 'Chưa có')}</dd></div>
+            <div><dt class="text-muted">Mã phản hồi</dt><dd class="font-semibold">${esc(payment.responseCode || 'Đang chờ')}</dd></div>
+            <div><dt class="text-muted">Tạo lúc</dt><dd class="font-semibold">${esc(new Date(payment.createdAt).toLocaleString('vi-VN'))}</dd></div>
+            <div><dt class="text-muted">VNPay báo lúc</dt><dd class="font-semibold">${esc(payment.callbackAt ? new Date(payment.callbackAt).toLocaleString('vi-VN') : 'Đang chờ')}</dd></div>
+          </dl>
+          <div class="mt-6 flex flex-wrap gap-3">
+            ${payment.status === 'pending' || payment.status === 'expired'
+              ? `<button type="button" data-action="refresh-premium-payment" data-txn-ref="${esc(payment.txnRef)}" class="rounded-full bg-accent px-5 py-2 font-bold text-black">Kiểm tra lại trạng thái</button>`
+              : ''}
+            <a href="#/premium" class="rounded-full border border-line px-5 py-2 font-semibold hover:bg-raised">Quay lại gói VIP</a>
+          </div>
+        </div>
+      </section>`;
+  }
+
+  async function checkoutPremium() {
+    if (!requireAccount()) return;
+    const message = $('#premium-message');
+    try {
+      const result = await api('/api/premium/checkout', jsonBody('POST', { plan: state.selectedPremiumPlan }));
+      window.location.assign(result.paymentUrl);
+    } catch (error) {
+      if (message) message.textContent = error.message;
+      else toast(error.message);
+    }
   }
 
   async function upgradePremium() {
@@ -1640,6 +1859,7 @@
           <p id="change-password-result" class="hidden text-sm" role="status"></p>
           <button id="change-password-submit" type="submit" class="rounded-full bg-accent px-5 py-3 font-bold text-black">Cập nhật mật khẩu</button>
         </form>
+        <p class="mt-4 text-sm text-center"><a class="font-semibold text-accent underline" href="#/auth/forgot">Quên mật khẩu?</a></p>
       </section>`;
 
     $('#change-password-form').addEventListener('submit', async (event) => {
@@ -1776,63 +1996,107 @@
   function viewForgotPassword() {
     view.innerHTML = `
       <section class="mx-auto mt-8 max-w-md rounded-xl bg-raised p-6 sm:p-8">
-        <h1 class="text-3xl font-extrabold">Yêu cầu đặt lại mật khẩu</h1>
-        <p class="mt-2 text-sm text-muted">Gửi yêu cầu và xác minh phép tính. Admin sẽ kiểm tra; nếu duyệt, link sẽ được gửi qua email tài khoản (khi SMTP đã cấu hình), nếu không Admin sẽ gửi riêng cho bạn.</p>
+        <h1 class="text-3xl font-extrabold">Quên mật khẩu</h1>
+        <p class="mt-2 text-sm text-muted">Nhập email tài khoản để nhận mã xác thực 6 số qua Gmail. Mã có hiệu lực 10 phút.</p>
         <form id="forgot-password-form" class="mt-6 grid gap-4">
           <div><label for="forgot-email" class="mb-1 block text-sm font-semibold">Email tài khoản</label><input id="forgot-email" name="email" type="email" class="field" maxlength="254" autocomplete="email" required /></div>
-          <div>
-            <div class="mb-1 flex items-center justify-between gap-3">
-              <label id="reset-captcha-question" for="reset-captcha-answer" class="text-sm font-semibold">Đang tải phép tính…</label>
-              <button id="reset-captcha-refresh" type="button" class="shrink-0 text-sm text-accent underline">Đổi mã</button>
-            </div>
-            <input id="reset-captcha-answer" name="answer" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="2" class="field" autocomplete="off" required />
-            <input id="reset-captcha-id" name="challengeId" type="hidden" />
-          </div>
-          <p id="forgot-password-result" class="hidden text-sm" role="status"></p>
-          <button id="forgot-password-submit" type="submit" class="rounded-full bg-accent px-5 py-3 font-bold text-black">Gửi yêu cầu cho Admin</button>
+          <p id="forgot-result" class="hidden text-sm" role="status"></p>
+          <button id="forgot-submit" type="submit" class="rounded-full bg-accent px-5 py-3 font-bold text-black">Gửi mã xác thực</button>
         </form>
         <p class="mt-5 text-sm"><a class="font-semibold text-white underline" href="#/auth/login">Quay lại đăng nhập</a></p>
       </section>`;
-    const loadCaptcha = async () => {
-      const question = $('#reset-captcha-question');
-      const refresh = $('#reset-captcha-refresh');
-      const answer = $('#reset-captcha-answer');
-      if (!question) return;
-      question.textContent = 'Đang tải phép tính…';
-      if (refresh) refresh.disabled = true;
-      if (answer) answer.value = '';
-      try {
-        const challenge = await api('/api/auth/password-reset-captcha');
-        if (!$('#reset-captcha-question')) return;
-        question.textContent = `Xác minh bạn không phải robot: ${challenge.question}`;
-        $('#reset-captcha-id').value = challenge.challengeId;
-      } catch (error) {
-        if (!$('#reset-captcha-question')) return;
-        question.textContent = `Không tải được mã xác minh: ${error.message}`;
-      } finally {
-        if ($('#reset-captcha-refresh')) $('#reset-captcha-refresh').disabled = false;
-      }
-    };
-    $('#reset-captcha-refresh').addEventListener('click', loadCaptcha);
-    void loadCaptcha();
-    $('#forgot-password-form').addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const button = $('#forgot-password-submit');
-      const result = $('#forgot-password-result');
-      const fields = Object.fromEntries(new FormData(event.currentTarget));
-      button.disabled = true;
-      result.classList.add('hidden');
-      try {
-        const response = await api('/api/auth/password-reset-requests', jsonBody('POST', fields));
-        result.textContent = response.message;
-        result.className = 'text-sm text-accent';
-      } catch (error) {
-        result.textContent = error.message;
+
+    const form = $('#forgot-password-form');
+    const result = $('#forgot-result');
+    const submit = $('#forgot-submit');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = $('#forgot-email').value.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        result.textContent = 'Vui lòng nhập email hợp lệ';
         result.className = 'text-sm text-red-400';
-      } finally {
         result.classList.remove('hidden');
-        await loadCaptcha();
-        button.disabled = false;
+        return;
+      }
+
+      submit.disabled = true;
+      submit.textContent = 'Đang gửi…';
+      result.classList.add('hidden');
+
+      try {
+        const response = await api('/api/auth/send-reset-code', jsonBody('POST', { email }));
+        result.textContent = response.message;
+        result.className = 'text-sm text-green-400';
+        result.classList.remove('hidden');
+
+        // Chuyển sang bước nhập mã
+        setTimeout(() => {
+          viewForgotPasswordVerifyCode(email);
+        }, 1500);
+      } catch (err) {
+        result.textContent = err.message;
+        result.className = 'text-sm text-red-400';
+        result.classList.remove('hidden');
+      } finally {
+        submit.disabled = false;
+        submit.textContent = 'Gửi mã xác thực';
+      }
+    });
+  }
+
+  function viewForgotPasswordVerifyCode(email) {
+    view.innerHTML = `
+      <section class="mx-auto mt-8 max-w-md rounded-xl bg-raised p-6 sm:p-8">
+        <h1 class="text-3xl font-extrabold">Nhập mã xác thực</h1>
+        <p class="mt-2 text-sm text-muted">Mã 6 số đã được gửi đến <strong>${esc(email)}</strong>. Vui lòng kiểm tra hộp thư (kể cả spam).</p>
+        <form id="verify-code-form" class="mt-6 grid gap-4">
+          <div>
+            <label for="verify-code" class="mb-1 block text-sm font-semibold">Mã xác thực</label>
+            <input id="verify-code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="field text-center text-2xl tracking-widest" autocomplete="one-time-code" required />
+          </div>
+          <p id="verify-result" class="hidden text-sm" role="status"></p>
+          <button id="verify-submit" type="submit" class="rounded-full bg-accent px-5 py-3 font-bold text-black">Xác minh</button>
+        </form>
+        <p class="mt-4 text-sm text-center"><a class="font-semibold text-accent underline" href="#/auth/forgot">Gửi lại mã</a></p>
+      </section>`;
+
+    const form = $('#verify-code-form');
+    const result = $('#verify-result');
+    const submit = $('#verify-submit');
+    const input = $('#verify-code');
+
+    // Auto-focus và auto-format
+    input.focus();
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/\D/g, '').slice(0, 6);
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = input.value.trim();
+      if (!/^\d{6}$/.test(code)) {
+        result.textContent = 'Vui lòng nhập mã 6 số';
+        result.className = 'text-sm text-red-400';
+        result.classList.remove('hidden');
+        return;
+      }
+
+      submit.disabled = true;
+      submit.textContent = 'Đang xác minh…';
+      result.classList.add('hidden');
+
+      try {
+        const response = await api('/api/auth/verify-reset-code', jsonBody('POST', { email, code }));
+        // Chuyển đến trang đặt lại mật khẩu với token
+        location.hash = `#/auth/reset?token=${encodeURIComponent(response.token)}`;
+      } catch (err) {
+        result.textContent = err.message;
+        result.className = 'text-sm text-red-400';
+        result.classList.remove('hidden');
+      } finally {
+        submit.disabled = false;
+        submit.textContent = 'Xác minh';
       }
     });
   }
@@ -2037,7 +2301,7 @@
   }
 
   async function route() {
-    const [page, arg] = parseHash();
+    const [page, arg, subarg] = parseHash();
     state.songLists.clear();
     state.viewSongs = [];
 
@@ -2064,7 +2328,11 @@
           viewFavorites();
           break;
         case 'premium':
-          viewPremium();
+          if (arg === 'payment' && subarg) await viewPremiumPayment(subarg);
+          else viewPremium();
+          break;
+        case 'vip':
+          await viewVipLibrary();
           break;
         case 'playlist':
           await viewPlaylist(arg);
@@ -2086,7 +2354,7 @@
           viewUpload();
           break;
         case 'auth':
-          if (state.user && !arg?.startsWith('reset')) {
+          if (state.user && (arg === 'login' || arg === 'register')) {
             location.hash = '#/';
             return;
           }
@@ -2157,6 +2425,16 @@
         break;
       case 'upgrade-premium':
         await upgradePremium();
+        break;
+      case 'checkout-premium':
+        await checkoutPremium();
+        break;
+      case 'refresh-premium-payment':
+        {
+          const paymentHash = `#/premium/payment/${encodeURIComponent(target.dataset.txnRef)}`;
+          if (location.hash === paymentHash) await viewPremiumPayment(target.dataset.txnRef);
+          else location.hash = paymentHash;
+        }
         break;
       case 'open-premium':
         closeModal();
@@ -2229,7 +2507,7 @@
     try {
       await loadAll();
     } catch (err) {
-      view.innerHTML = emptyState('Không kết nối được máy chủ', 'Hãy chắc chắn server đang chạy (npm start) rồi tải lại trang.');
+      view.innerHTML = emptyState('Không tải được dữ liệu', `Lỗi máy chủ: ${esc(err.message)}`);
       return;
     }
     restorePlayerState();

@@ -10,7 +10,7 @@
   let account;
   let data = {
     overview: null, songs: [], albums: [], artists: [], genres: [], users: [],
-    premiumRequests: [], supportConversations: [], passwordResetRequests: [], revenue: null,
+    premiumRequests: [], supportConversations: [], passwordResetRequests: [], revenue: null, listening: null,
   };
   let selectedSupportId = null;
   let supportMessages = [];
@@ -29,6 +29,10 @@
   const PAGE_SIZE = 10;
   let revenuePeriod = 'all';
   let revenueSalesPage = 1;
+  let revenuePaymentsPage = 1;
+  let listeningPeriod = 'week';
+  let analyticsPolling = false;
+  let analyticsPollErrorShown = false;
   const currency = new Intl.NumberFormat('vi-VN', {
     style: 'currency',
     currency: 'VND',
@@ -123,7 +127,7 @@
   }
 
   async function loadData() {
-    const [overview, songs, albums, artists, genres, users, premiumRequests, supportConversations, passwordResetRequests, revenue] = await Promise.all([
+    const [overview, songs, albums, artists, genres, users, premiumRequests, supportConversations, passwordResetRequests, revenue, listening] = await Promise.all([
       api('/api/admin/overview'),
       api('/api/admin/songs'),
       api('/api/admin/albums'),
@@ -134,8 +138,9 @@
       api('/api/admin/support/conversations'),
       api('/api/admin/password-reset-requests'),
       api('/api/admin/revenue'),
+      api(`/api/admin/listening-analytics?period=${listeningPeriod}`),
     ]);
-    data = { overview, songs, albums, artists, genres, users, premiumRequests, supportConversations, passwordResetRequests, revenue };
+    data = { overview, songs, albums, artists, genres, users, premiumRequests, supportConversations, passwordResetRequests, revenue, listening };
     render();
   }
 
@@ -284,6 +289,12 @@
   function renderRequestLists() {
     const planNames = { month: '1 tháng', halfYear: '6 tháng', year: '12 tháng' };
     const requestStatus = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' };
+    const paymentStatus = {
+      pending: 'Chờ VNPay xác nhận',
+      expired: 'Đơn hết hạn, chưa hoàn tất',
+      paid: 'Đã thanh toán Sandbox',
+      failed: 'Thanh toán thất bại',
+    };
     renderPagedList('premiumRequests', data.premiumRequests, (request) => `
       <tr class="border-t border-line">
         <td class="p-2">${esc(request.userName)}</td>
@@ -291,12 +302,20 @@
         <td class="p-2">${esc(planNames[request.plan] || request.plan)}</td>
         <td class="p-2">${Number(request.price).toLocaleString('vi-VN')}đ</td>
         <td class="p-2">${esc(new Date(request.createdAt).toLocaleString('vi-VN'))}</td>
-        <td class="p-2">${esc(requestStatus[request.status] || request.status)}</td>
-        <td class="p-2">${request.status === 'pending' ? `
+        <td class="p-2">${esc(request.payment
+          ? paymentStatus[request.payment.status] || request.payment.status
+          : requestStatus[request.status] || request.status)}
+          ${request.payment ? `<span class="block break-all text-xs text-muted">${esc(request.payment.txnRef)}${request.payment.responseCode ? ` · ${esc(request.payment.responseCode)}` : ''}</span>` : ''}
+        </td>
+        <td class="p-2">${request.status === 'pending' && !request.payment ? `
           <div class="flex flex-wrap gap-2">
             <button data-review-premium="${request.id}" data-review-action="approve" class="rounded-full bg-accent px-3 py-1 font-bold text-black">Duyệt</button>
             <button data-review-premium="${request.id}" data-review-action="reject" class="rounded-full border border-line px-3 py-1 text-red-300">Từ chối</button>
-          </div>` : '—'}</td>
+          </div>` : request.payment?.status === 'pending'
+          ? 'Chờ VNPay, không thể duyệt thủ công'
+          : request.payment?.status === 'expired'
+            ? 'Đơn hết hạn; kết quả VNPay đến muộn vẫn được đối soát'
+            : '—'}</td>
       </tr>
     `, '<tr><td class="p-3 text-muted" colspan="7">Chưa có yêu cầu nâng cấp.</td></tr>');
 
@@ -363,13 +382,40 @@
     }
   }
 
+  async function pollAdminAnalytics() {
+    if (analyticsPolling || document.hidden) return;
+    analyticsPolling = true;
+    try {
+      const [overview, listening, revenue] = await Promise.all([
+        api('/api/admin/overview'),
+        api(`/api/admin/listening-analytics?period=${listeningPeriod}`),
+        api('/api/admin/revenue'),
+      ]);
+      data.overview = overview;
+      data.listening = listening;
+      data.revenue = revenue;
+      renderOverview();
+      renderRevenue();
+      analyticsPollErrorShown = false;
+    } catch (error) {
+      if (!analyticsPollErrorShown) message(`Không thể cập nhật số liệu tổng quan: ${error.message}`, true);
+      analyticsPollErrorShown = true;
+    } finally {
+      analyticsPolling = false;
+    }
+  }
+
   function renderCatalogLists() {
     const newestSongs = data.songs.slice().sort((a, b) => b.id - a.id);
     renderPagedList('songs', newestSongs, (song) => `
       <tr class="border-t border-line">
         <td class="p-2">${esc(song.title)}</td><td class="p-2">${esc(song.artistName)}</td><td class="p-2">${esc(song.genre)}</td><td class="p-2">${song.plays || 0}</td>
         <td class="p-2"><label class="inline-flex items-center gap-2"><input type="checkbox" data-song-vip="${song.id}" ${song.isVip ? 'checked' : ''} aria-label="Đánh dấu ${esc(song.title)} là bài hát VIP" /><span>${song.isVip ? 'VIP' : 'Thường'}</span></label></td>
-        <td class="p-2"><button data-edit-song="${song.id}" class="mr-2 rounded-full border border-line px-3 py-1 hover:bg-raised">Sửa</button><button data-delete-song="${song.id}" class="rounded-full border border-line px-3 py-1 text-red-300 hover:bg-raised">Xóa</button></td>
+        <td class="p-2"><div class="flex flex-wrap gap-2">
+          <button data-edit-song="${song.id}" class="rounded-full border border-line px-3 py-1 hover:bg-raised">Sửa</button>
+          <button data-toggle-trending="${song.id}" data-trending-active="${song.isTrending ? 'true' : 'false'}" class="rounded-full border ${song.isTrending ? 'border-accent text-accent' : 'border-line hover:bg-raised'} px-3 py-1">${song.isTrending ? 'Bỏ trend' : 'Đề cử trend'}</button>
+          <button data-delete-song="${song.id}" class="rounded-full border border-line px-3 py-1 text-red-300 hover:bg-raised">Xóa</button>
+        </div></td>
       </tr>
     `, '<tr><td class="p-3 text-muted" colspan="6">Chưa có bài hát.</td></tr>');
 
@@ -396,18 +442,7 @@
   }
 
   function render() {
-    $('#admin-stats').innerHTML = [
-      ['Bài hát', data.overview.songCount],
-      ['Người dùng', data.overview.userCount],
-      ['Album', data.overview.albumCount],
-      ['Thể loại', data.overview.genreCount],
-    ].map(([label, count]) => `
-      <article class="rounded-xl bg-panel p-5"><p class="text-sm text-muted">${label}</p><p class="mt-1 text-3xl font-extrabold">${count}</p></article>
-    `).join('');
-
-    $('#top-songs').innerHTML = data.overview.topSongs.length
-      ? data.overview.topSongs.map((song) => `<li>${esc(song.title)} <span class="text-white">— ${song.plays || 0} lượt</span></li>`).join('')
-      : '<li>Chưa có dữ liệu lượt nghe.</li>';
+    renderOverview();
 
     $('#user-list').innerHTML = data.users.map((user) => `
       <tr class="border-t border-line">
@@ -434,6 +469,122 @@
     renderRevenue();
   }
 
+  function renderDashboardChart(selector, items, valueKey, kind) {
+    const values = items || [];
+    const max = Math.max(0, ...values.map((item) => Number(item[valueKey]) || 0));
+    const total = values.reduce((sum, item) => sum + (Number(item[valueKey]) || 0), 0);
+    const formatValue = (value) => kind === 'currency' ? currency.format(value) : `${value.toLocaleString('vi-VN')} lượt`;
+    const compactValue = (value) => kind === 'currency'
+      ? value >= 1_000_000
+        ? `${(value / 1_000_000).toFixed(1).replace(/\\.0$/, '')}tr`
+        : value >= 1_000
+          ? `${Math.round(value / 1_000)}k`
+          : String(value)
+      : String(value);
+    $(selector).innerHTML = values.map((item) => {
+      const key = item.key || item.date;
+      const date = key.length === 13
+        ? new Date(`${key}:00:00Z`)
+        : key.length === 7
+          ? new Date(`${key}-01T00:00:00Z`)
+          : key.length === 10
+            ? new Date(`${key}T00:00:00Z`)
+            : new Date(key);
+      const label = item.granularity === 'month' || key.length === 7
+        ? date.toLocaleDateString('vi-VN', { month: '2-digit', year: '2-digit', timeZone: 'UTC' })
+        : key.length === 13
+        ? new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', timeZone: 'UTC' }).format(date)
+        : date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+      const value = Number(item[valueKey]) || 0;
+      const height = max === 0 ? 0 : Math.max(value > 0 ? 3 : 0, value / max * 100);
+      return `
+        <div class="revenue-chart-column" title="${esc(`${key} · ${formatValue(value)}`)}">
+          <span class="revenue-chart-value">${esc(compactValue(value))}</span>
+          <div class="revenue-chart-track"><div class="revenue-chart-bar" style="height:${height}%"></div></div>
+          <span class="revenue-chart-date">${esc(label)}</span>
+        </div>`;
+    }).join('') || '<p class="text-sm text-muted">Chưa có dữ liệu.</p>';
+    return { total, formatValue };
+  }
+
+  function renderOverview() {
+    if (!data.overview) return;
+    const stats = [
+      ['Bài hát', data.overview.songCount, `${data.overview.vipSongCount} bài VIP`],
+      ['Tài khoản', data.overview.userCount, `${data.overview.activeUserCount} hoạt động · ${data.overview.blockedUserCount} bị khóa`],
+      ['Tài khoản VIP', data.overview.premiumUserCount, 'Còn thời hạn sử dụng'],
+      ['Album', data.overview.albumCount, `${data.overview.genreCount} thể loại`],
+      ['Yêu cầu VIP chờ', data.overview.pendingPremiumCount, 'Cần được xử lý'],
+      ['Hội thoại hỗ trợ mở', data.overview.openSupportCount, 'Đang chờ hoặc đang hỗ trợ'],
+    ];
+    $('#admin-stats').innerHTML = stats.map(([label, count, detail]) => `
+      <article class="rounded-xl bg-panel p-5">
+        <p class="text-sm text-muted">${esc(label)}</p>
+        <p class="mt-1 text-3xl font-extrabold">${Number(count || 0).toLocaleString('vi-VN')}</p>
+        <p class="mt-1 text-xs text-muted">${esc(detail)}</p>
+      </article>
+    `).join('');
+
+    const revenueChart = renderDashboardChart('#overview-revenue-chart', data.revenue?.charts?.all, 'amount', 'currency');
+    $('#overview-revenue-total').textContent = revenueChart.formatValue(revenueChart.total);
+    if (!data.listening) return;
+    $('#overview-listening-period').value = listeningPeriod;
+    renderDashboardChart('#overview-listening-chart', data.listening.chart, 'listenCount', 'count');
+    $('#listening-summary').innerHTML = `
+      <span><strong>${Number(data.listening.summary.listenCount).toLocaleString('vi-VN')}</strong> lượt nghe</span>
+      <span><strong>${Number(data.listening.summary.uniqueListeners).toLocaleString('vi-VN')}</strong> tài khoản đã nghe</span>
+    `;
+    $('#listening-history-count').textContent =
+      `${data.listening.recent.length} bản ghi gần đây · ${data.listening.periodLabel}`;
+    $('#overview-updated-at').textContent = new Date(data.listening.generatedAt).toLocaleString('vi-VN');
+
+    const genreStats = data.overview.genreStats || [];
+    const maxGenreCount = Math.max(1, ...genreStats.map((item) => item.songCount));
+    $('#overview-genre-breakdown').innerHTML = genreStats.length
+      ? genreStats.map((item) => `
+        <div>
+          <div class="mb-1 flex justify-between gap-3 text-sm"><span class="truncate">${esc(item.genre)}</span><strong>${item.songCount}</strong></div>
+          <div class="h-2 overflow-hidden rounded-full bg-raised"><div class="h-full rounded-full bg-accent" style="width:${item.songCount / maxGenreCount * 100}%"></div></div>
+        </div>`).join('')
+      : '<p class="text-sm text-muted">Chưa có bài hát để thống kê thể loại.</p>';
+
+    const topSongs = data.overview.topSongs || [];
+    const topSongIds = new Set(topSongs.map((song) => song.id));
+    const suggestedSongs = [
+      ...topSongs,
+      ...(data.overview.trendingSongs || []).filter((song) => !topSongIds.has(song.id)),
+    ];
+    $('#top-songs').innerHTML = suggestedSongs.length
+      ? suggestedSongs.map((song, index) => `
+        <li class="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 last:border-0">
+          <div class="min-w-0">
+            <p class="truncate font-semibold">${index < topSongs.length ? `${index + 1}. ` : ''}${esc(song.title)} <span class="font-normal text-muted">— ${esc(song.artistName)}</span></p>
+            <p class="mt-1 text-xs text-muted">${Number(song.plays || 0).toLocaleString('vi-VN')} lượt nghe tổng · ${song.isTrending ? 'Đã đề cử lên trang chủ' : index < topSongs.length ? 'Đang được gợi ý tự động' : 'Đề cử thủ công'}</p>
+          </div>
+          <button type="button" data-toggle-trending="${song.id}" data-trending-active="${song.isTrending ? 'true' : 'false'}" class="shrink-0 rounded-full border ${song.isTrending ? 'border-accent text-accent' : 'border-line hover:bg-raised'} px-3 py-1 text-xs font-semibold">
+            ${song.isTrending ? 'Bỏ đề cử' : 'Đề cử làm trend'}
+          </button>
+        </li>`).join('')
+      : '<li class="text-sm text-muted">Chưa có dữ liệu lượt nghe để gợi ý bài trend.</li>';
+
+    $('#listening-period-top').innerHTML = (data.listening.topSongs || []).length
+      ? `<p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Nghe nhiều trong ${esc(data.listening.periodLabel.toLowerCase())}</p>
+        <ol class="grid gap-2 sm:grid-cols-2">${data.listening.topSongs.slice(0, 4).map((song, index) => `
+          <li class="truncate text-sm"><span class="mr-2 text-accent">${index + 1}.</span>${esc(song.title)} <span class="text-muted">· ${song.listenCount} lượt</span></li>
+        `).join('')}</ol>`
+      : '<p class="text-xs text-muted">Chưa có lượt nghe từ tài khoản đăng nhập trong khoảng này.</p>';
+
+    $('#listening-history-list').innerHTML = data.listening.recent.map((event) => `
+      <tr class="border-t border-line">
+        <td class="p-3">${esc(event.userName)}</td>
+        <td class="p-3">${esc(event.userEmail)}</td>
+        <td class="p-3 font-semibold">${esc(event.songTitle)}</td>
+        <td class="p-3">${esc(event.artistName)}</td>
+        <td class="p-3 whitespace-nowrap">${esc(new Date(event.playedAt).toLocaleString('vi-VN'))}</td>
+      </tr>
+    `).join('') || '<tr><td class="p-3 text-muted" colspan="5">Chưa có lịch sử nghe. Bản ghi chỉ được tạo khi tài khoản đăng nhập bắt đầu phát bài hát.</td></tr>';
+  }
+
   function renderRevenue() {
     if (!data.revenue) return;
     const periodLabels = {
@@ -445,7 +596,6 @@
       year: '12 tháng qua',
     };
     $('#revenue-period-totals').innerHTML = Object.entries(periodLabels)
-      .filter(([key]) => key !== 'all')
       .map(([key, label]) => `
       <button type="button" data-revenue-period="${key}" aria-pressed="${revenuePeriod === key}" class="revenue-period-card rounded-xl border border-line bg-raised p-4 text-left ${revenuePeriod === key ? 'selected' : ''}">
         <p class="text-sm text-muted">${label}</p>
@@ -454,10 +604,11 @@
     `).join('');
     $('#revenue-sales-period').value = revenuePeriod;
 
-    const chart = data.revenue.chart || [];
+    const chart = data.revenue.charts?.[revenuePeriod] || [];
     const max = Math.max(0, ...chart.map((item) => item.amount));
-    const chartTotal = chart.reduce((sum, item) => sum + item.amount, 0);
-    $('#revenue-chart-total').textContent = `Tổng 14 ngày: ${currency.format(chartTotal)}`;
+    $('#revenue-chart-heading').textContent = `Doanh thu — ${periodLabels[revenuePeriod]}`;
+    $('#revenue-chart-total').textContent =
+      `Tổng ${periodLabels[revenuePeriod]}: ${currency.format(data.revenue.totals[revenuePeriod] || 0)}`;
     $('#revenue-chart').innerHTML = chart.map((item) => {
       const height = max === 0 ? 0 : Math.max(item.amount > 0 ? 3 : 0, item.amount / max * 100);
       const shortAmount = item.amount >= 1_000_000
@@ -465,11 +616,12 @@
         : item.amount >= 1_000
           ? `${Math.round(item.amount / 1_000)}k`
           : String(item.amount);
-      const dateLabel = new Date(`${item.date}T00:00:00Z`).toLocaleDateString('vi-VN', {
-        day: '2-digit',
-        month: '2-digit',
-        timeZone: 'UTC',
-      });
+      const date = new Date(item.date);
+      const dateLabel = item.granularity === 'hour'
+        ? date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+        : item.granularity === 'month'
+          ? date.toLocaleDateString('vi-VN', { month: '2-digit', year: '2-digit', timeZone: 'UTC' })
+          : date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
       return `
         <div class="revenue-chart-column" title="${esc(dateLabel)} — ${esc(currency.format(item.amount))}">
           <span class="revenue-chart-value">${esc(shortAmount)}</span>
@@ -480,6 +632,7 @@
     }).join('');
     $('#revenue-updated-at').textContent = `Cập nhật: ${new Date(data.revenue.generatedAt).toLocaleString('vi-VN')}`;
     renderRevenueSales();
+    renderRevenuePayments();
   }
 
   function renderRevenueSales() {
@@ -518,6 +671,50 @@
         <button type="button" data-revenue-sales-page="${revenueSalesPage + 1}" class="rounded-full border border-line px-3 py-1 text-sm disabled:opacity-40" ${revenueSalesPage === pageCount ? 'disabled' : ''}>Sau</button>
       </div>
     ` : `<span class="text-sm text-muted">${sales.length} mục</span>`;
+  }
+
+  function renderRevenuePayments() {
+    if (!data.revenue) return;
+    const periodDurations = {
+      day: 24 * 60 * 60 * 1000,
+      week: 7 * 24 * 60 * 60 * 1000,
+      month: 30 * 24 * 60 * 60 * 1000,
+      halfYear: 183 * 24 * 60 * 60 * 1000,
+      year: 365 * 24 * 60 * 60 * 1000,
+    };
+    const now = Date.parse(data.revenue.generatedAt);
+    const payments = (data.revenue.payments || []).filter((payment) => {
+      if (revenuePeriod === 'all') return true;
+      const timestamp = Date.parse(payment.createdAt);
+      return timestamp >= now - periodDurations[revenuePeriod] && timestamp <= now;
+    });
+    const pageCount = Math.ceil(payments.length / PAGE_SIZE);
+    revenuePaymentsPage = Math.min(Math.max(revenuePaymentsPage, 1), Math.max(pageCount, 1));
+    const pagePayments = payments.slice((revenuePaymentsPage - 1) * PAGE_SIZE, revenuePaymentsPage * PAGE_SIZE);
+    const planNames = { month: '1 tháng', halfYear: '6 tháng', year: '12 tháng' };
+    const statusNames = { pending: 'Đang chờ', paid: 'Đã thanh toán', failed: 'Thất bại' };
+    $('#revenue-payment-list').innerHTML = pagePayments.map((payment) => `
+      <tr class="border-t border-line align-top">
+        <td class="p-3">${esc(payment.userName)}</td>
+        <td class="p-3">${esc(payment.userEmail)}</td>
+        <td class="p-3">${esc(planNames[payment.plan] || payment.plan)}</td>
+        <td class="p-3 font-semibold">${currency.format(payment.amount)}</td>
+        <td class="p-3">${esc(statusNames[payment.status] || payment.status)}<span class="block text-xs text-muted">${esc([payment.responseCode, payment.transactionStatus].filter(Boolean).join(' / ') || 'Chưa có mã phản hồi')}</span></td>
+        <td class="p-3 break-all">${esc(payment.txnRef)}</td>
+        <td class="p-3 break-all">${esc(payment.transactionNo || '—')}</td>
+        <td class="p-3">${esc([payment.bankCode, payment.cardType].filter(Boolean).join(' / ') || '—')}</td>
+        <td class="p-3 whitespace-nowrap">Tạo: ${esc(new Date(payment.createdAt).toLocaleString('vi-VN'))}<span class="mt-1 block text-xs text-muted">IPN: ${esc(payment.callbackAt ? new Date(payment.callbackAt).toLocaleString('vi-VN') : 'Đang chờ')}</span></td>
+        <td class="p-3">${payment.vipActivated ? 'Đã kích hoạt' : 'Chưa kích hoạt'}</td>
+        <td class="p-3"><details><summary class="cursor-pointer whitespace-nowrap text-accent">Mở dữ liệu</summary><pre class="mt-2 max-w-md whitespace-pre-wrap break-all rounded bg-base p-3 text-xs">${esc(JSON.stringify(payment, null, 2))}</pre></details></td>
+      </tr>
+    `).join('') || '<tr><td class="p-3 text-muted" colspan="11">Chưa có giao dịch VNPay nào.</td></tr>';
+    $('#revenue-payment-pagination').innerHTML = pageCount > 1 ? `
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" data-revenue-payment-page="${revenuePaymentsPage - 1}" class="rounded-full border border-line px-3 py-1 text-sm disabled:opacity-40" ${revenuePaymentsPage === 1 ? 'disabled' : ''}>Trước</button>
+        <span class="text-sm text-muted">Trang ${revenuePaymentsPage}/${pageCount} · ${payments.length} giao dịch</span>
+        <button type="button" data-revenue-payment-page="${revenuePaymentsPage + 1}" class="rounded-full border border-line px-3 py-1 text-sm disabled:opacity-40" ${revenuePaymentsPage === pageCount ? 'disabled' : ''}>Sau</button>
+      </div>
+    ` : `<span class="text-sm text-muted">${payments.length} giao dịch</span>`;
   }
 
   const periodLabelsForRevenue = {
@@ -609,8 +806,30 @@
       renderRevenueSales();
       return;
     }
+    if (button.dataset.revenuePaymentPage) {
+      revenuePaymentsPage = Number(button.dataset.revenuePaymentPage);
+      renderRevenuePayments();
+      return;
+    }
     try {
-      if (button.dataset.adminListMore) {
+      if (button.dataset.toggleTrending) {
+        const song = data.songs.find((item) => item.id === Number(button.dataset.toggleTrending));
+        if (!song) return;
+        const isTrending = button.dataset.trendingActive !== 'true';
+        if (!await confirmAction(
+          isTrending
+            ? `Đề cử "${song.title}" lên mục Đang thịnh hành trên trang chủ?`
+            : `Bỏ đề cử trend của "${song.title}"?`,
+          {
+            title: isTrending ? 'Đề cử bài trend' : 'Bỏ đề cử bài trend',
+            confirmLabel: isTrending ? 'Đề cử' : 'Bỏ đề cử',
+            danger: !isTrending,
+          }
+        )) return;
+        await api(`/api/admin/songs/${song.id}/trending`, json('PATCH', { isTrending }));
+        await loadData();
+        message(isTrending ? `Đã đề cử "${song.title}" làm trend.` : `Đã bỏ đề cử "${song.title}".`);
+      } else if (button.dataset.adminListMore) {
         const key = button.dataset.adminListMore;
         paginatedLists[key].expanded = true;
         paginatedLists[key].page = 1;
@@ -903,6 +1122,16 @@
     renderRevenue();
   });
 
+  $('#overview-listening-period').addEventListener('change', async (event) => {
+    listeningPeriod = event.currentTarget.value;
+    try {
+      data.listening = await api(`/api/admin/listening-analytics?period=${listeningPeriod}`);
+      renderOverview();
+    } catch (error) {
+      message(`Không thể tải thống kê lượt nghe: ${error.message}`, true);
+    }
+  });
+
   $('#support-reply-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!selectedSupportId) return;
@@ -952,12 +1181,15 @@
       await loadData();
       const supportPollTimer = window.setInterval(pollSupport, 2000);
       const requestPollTimer = window.setInterval(pollAdminRequests, 4000);
+      const analyticsPollTimer = window.setInterval(pollAdminAnalytics, 15000);
       window.addEventListener('pagehide', () => window.clearInterval(supportPollTimer), { once: true });
       window.addEventListener('pagehide', () => window.clearInterval(requestPollTimer), { once: true });
+      window.addEventListener('pagehide', () => window.clearInterval(analyticsPollTimer), { once: true });
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
           pollSupport();
           pollAdminRequests();
+          pollAdminAnalytics();
         }
       });
     } catch (error) {

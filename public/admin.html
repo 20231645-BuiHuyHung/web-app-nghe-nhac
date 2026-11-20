@@ -1,22 +1,19 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" class="admin-document">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Quản trị – Nhạc Online</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = { theme: { extend: { colors: { base: '#121212', panel: '#181818', raised: '#242424', line: '#333', accent: '#1ed760', muted: '#a7a7a7' } } } };
-  </script>
+  <link rel="stylesheet" href="/tailwind.css" />
   <link rel="stylesheet" href="/style.css" />
 </head>
-<body class="min-h-screen bg-base text-white">
+<body class="admin-page min-h-screen overflow-y-auto bg-base text-white">
   <header class="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-line bg-panel px-4 py-4 sm:px-8">
     <div>
       <h1 class="text-2xl font-extrabold">Bảng quản trị</h1>
       <p id="admin-account" class="text-sm text-muted">Đang kiểm tra tài khoản…</p>
     </div>
-    <nav class="flex gap-2">
+    <nav class="flex flex-wrap justify-end gap-2">
       <button type="button" data-admin-section-target="support" class="rounded-full border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-200 hover:bg-raised">Hỗ trợ khách hàng</button>
       <a href="/" class="rounded-full border border-line px-4 py-2 text-sm font-semibold hover:bg-raised">Về trang nghe nhạc</a>
       <button id="admin-logout" class="rounded-full bg-white px-4 py-2 text-sm font-bold text-black">Đăng xuất</button>
@@ -44,26 +41,79 @@
       <button type="button" class="admin-section-button" data-admin-section-target="password-resets">Đặt lại mật khẩu</button>
     </nav>
     <section data-admin-panel="overview">
-      <h2 class="mb-4 text-xl font-bold">Tổng quan</h2>
-      <div id="admin-stats" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"></div>
-      <div class="mt-4 rounded-xl bg-panel p-5">
-        <h3 class="mb-3 font-bold">Top bài hát theo lượt nghe</h3>
-        <ol id="top-songs" class="grid gap-2 text-sm text-muted sm:grid-cols-2"></ol>
+      <div class="mb-4">
+        <h2 class="text-xl font-bold">Tổng quan</h2>
+        <p class="mt-1 text-sm text-muted">Tổng hợp tài khoản, thư viện, doanh thu và hoạt động nghe nhạc.</p>
       </div>
+      <div id="admin-stats" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"></div>
+      <div class="mt-4 grid gap-4 xl:grid-cols-2">
+        <article class="rounded-xl bg-panel p-5">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div><h3 class="font-bold">Doanh thu VIP</h3><p class="text-xs text-muted">Toàn bộ lịch sử · khoản đã duyệt/xác nhận</p></div>
+            <p id="overview-revenue-total" class="font-bold text-accent"></p>
+          </div>
+          <div id="overview-revenue-chart" class="revenue-chart" aria-label="Biểu đồ doanh thu tổng quan"></div>
+          <button type="button" data-admin-section-target="revenue" class="mt-2 text-sm text-accent hover:underline">Mở chi tiết doanh thu</button>
+        </article>
+        <article class="rounded-xl bg-panel p-5">
+          <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div><h3 class="font-bold">Lượt nghe theo thời gian</h3><p class="text-xs text-muted">Chỉ gồm tài khoản đăng nhập; chi tiết được lưu không thời hạn.</p></div>
+            <label class="text-xs text-muted">Khoảng thời gian
+              <select id="overview-listening-period" class="field mt-1 py-2">
+                <option value="day">24 giờ</option>
+                <option value="week" selected>7 ngày</option>
+                <option value="month">30 ngày</option>
+                <option value="all">Toàn bộ</option>
+              </select>
+            </label>
+          </div>
+          <div id="listening-summary" class="mb-2 flex flex-wrap gap-4 text-sm"></div>
+          <div id="overview-listening-chart" class="revenue-chart" aria-label="Biểu đồ lượt nghe"></div>
+          <div id="listening-period-top" class="mt-3 border-t border-line pt-3"></div>
+        </article>
+      </div>
+      <div class="mt-4 grid gap-4 xl:grid-cols-2">
+        <article class="rounded-xl bg-panel p-5">
+          <h3 class="font-bold">Thể loại trong thư viện</h3>
+          <p class="mt-1 text-xs text-muted">Số bài hát theo từng thể loại</p>
+          <div id="overview-genre-breakdown" class="mt-4 space-y-3"></div>
+        </article>
+        <article class="rounded-xl bg-panel p-5">
+          <h3 class="font-bold">Top lượt nghe & đề cử trend</h3>
+          <p class="mt-1 text-xs text-muted">Top 5 được tự động gợi ý; Admin có thể thêm hoặc bỏ đề cử hiển thị trên trang chủ.</p>
+          <ol id="top-songs" class="mt-4 space-y-3 text-sm"></ol>
+        </article>
+      </div>
+      <article class="mt-4 rounded-xl bg-panel p-5">
+        <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h3 class="font-bold">Ai nghe bài nào và lúc nào</h3>
+            <p id="listening-history-caption" class="mt-1 text-xs text-muted">Lịch sử bắt đầu từ khi tính năng được bật; khách chưa đăng nhập không được định danh hay lưu.</p>
+          </div>
+          <p id="listening-history-count" class="text-sm text-muted"></p>
+        </div>
+        <div class="overflow-x-auto rounded-xl border border-line">
+          <table class="w-full min-w-[850px] text-left text-sm">
+            <thead class="bg-raised text-muted"><tr><th class="p-3">Người nghe</th><th class="p-3">Email tài khoản lúc nghe</th><th class="p-3">Bài hát</th><th class="p-3">Nghệ sĩ</th><th class="p-3">Thời điểm bắt đầu nghe</th></tr></thead>
+            <tbody id="listening-history-list"></tbody>
+          </table>
+        </div>
+      </article>
+      <p class="mt-3 text-right text-xs text-muted">Cập nhật tổng quan: <span id="overview-updated-at"></span></p>
     </section>
 
     <section data-admin-panel="revenue" class="hidden rounded-xl bg-panel p-5">
       <div class="mb-5">
         <h2 class="text-xl font-bold">Doanh thu VIP</h2>
-        <p class="mt-1 text-sm text-muted">Số liệu mô phỏng từ các yêu cầu VIP đã được duyệt, tính theo thời điểm duyệt. Chỉ phản ánh doanh thu ghi nhận trong hệ thống, không xác nhận giao dịch thanh toán thực tế.</p>
+        <p class="mt-1 text-sm text-muted">Các khoản VNPay Sandbox chỉ là giao dịch thử nghiệm, không phải tiền thật. Tổng ghi nhận gồm yêu cầu mô phỏng đã duyệt và đơn VNPay có IPN hợp lệ, VIP đã kích hoạt.</p>
       </div>
-      <div id="revenue-period-totals" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-live="polite"></div>
+      <div id="revenue-period-totals" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6" aria-live="polite"></div>
       <div class="mt-6 rounded-xl border border-line p-4">
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 class="font-bold">Doanh thu theo ngày — 14 ngày gần nhất</h3>
+          <h3 id="revenue-chart-heading" class="font-bold">Doanh thu theo thời gian</h3>
           <p id="revenue-chart-total" class="text-sm text-muted"></p>
         </div>
-        <div id="revenue-chart" class="revenue-chart" aria-label="Biểu đồ doanh thu VIP theo ngày"></div>
+        <div id="revenue-chart" class="revenue-chart" aria-label="Biểu đồ doanh thu VIP theo khoảng thời gian đã chọn"></div>
       </div>
       <div class="mt-6">
         <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
@@ -89,6 +139,37 @@
           </table>
         </div>
         <div id="revenue-sales-pagination" class="mt-3"></div>
+      </div>
+      <div class="mt-8">
+        <div class="mb-3">
+          <h3 class="font-bold">Giao dịch VNPay Sandbox</h3>
+          <p class="mt-1 text-sm text-muted">Bao gồm đơn chờ, thành công và thất bại. Mở “Dữ liệu đã lưu” để xem các trường giao dịch; ứng dụng không lưu số thẻ hoặc OTP.</p>
+        </div>
+        <div class="overflow-x-auto rounded-xl border border-line">
+          <table class="w-full min-w-[1200px] text-left text-sm">
+            <thead class="bg-raised text-muted"><tr><th class="p-3">Tài khoản</th><th class="p-3">Email</th><th class="p-3">Gói</th><th class="p-3">Số tiền</th><th class="p-3">Trạng thái</th><th class="p-3">Mã đơn (TxnRef)</th><th class="p-3">Mã giao dịch VNPay</th><th class="p-3">Ngân hàng / thẻ</th><th class="p-3">Thời điểm</th><th class="p-3">VIP</th><th class="p-3">Dữ liệu đã lưu</th></tr></thead>
+            <tbody id="revenue-payment-list"></tbody>
+          </table>
+        </div>
+        <div id="revenue-payment-pagination" class="mt-3"></div>
+        <details class="mt-4 rounded-lg border border-line p-4 text-sm">
+          <summary class="cursor-pointer font-semibold">Giải thích các trường dữ liệu giao dịch</summary>
+          <dl class="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+            <div><dt class="font-semibold">id / requestId</dt><dd class="text-muted">Mã nội bộ của giao dịch / yêu cầu VIP liên quan.</dd></div>
+            <div><dt class="font-semibold">userId / userName / userEmail</dt><dd class="text-muted">Mã tài khoản và tên/email đối chiếu; tên/email được lấy từ hồ sơ người dùng.</dd></div>
+            <div><dt class="font-semibold">txnRef</dt><dd class="text-muted">Mã đơn hàng do website tạo và gửi cho VNPay.</dd></div>
+            <div><dt class="font-semibold">plan / amount / currency</dt><dd class="text-muted">Gói VIP, số tiền VND của đơn và đơn vị tiền tệ.</dd></div>
+            <div><dt class="font-semibold">status</dt><dd class="text-muted">Trạng thái nội bộ: pending (chờ), paid (thành công), failed (thất bại).</dd></div>
+            <div><dt class="font-semibold">orderInfo</dt><dd class="text-muted">Mô tả đơn hàng gửi tới trang thanh toán VNPay.</dd></div>
+            <div><dt class="font-semibold">clientIp</dt><dd class="text-muted">Địa chỉ IP gửi lúc tạo đơn, dùng làm tham số cho VNPay và đối soát.</dd></div>
+            <div><dt class="font-semibold">createdAt / expiresAt / callbackAt</dt><dd class="text-muted">Thời điểm tạo đơn / hết hạn / máy chủ nhận IPN.</dd></div>
+            <div><dt class="font-semibold">responseCode / transactionStatus</dt><dd class="text-muted">Mã kết quả thanh toán / trạng thái giao dịch do VNPay gửi.</dd></div>
+            <div><dt class="font-semibold">transactionNo / bankTranNo</dt><dd class="text-muted">Mã giao dịch VNPay / mã giao dịch phía ngân hàng (nếu được trả về).</dd></div>
+            <div><dt class="font-semibold">bankCode / cardType / payDate</dt><dd class="text-muted">Mã ngân hàng / loại thẻ / thời gian thanh toán do VNPay gửi.</dd></div>
+            <div><dt class="font-semibold">vipActivated</dt><dd class="text-muted">Cho biết IPN thành công đã kích hoạt thời hạn VIP hay chưa.</dd></div>
+          </dl>
+          <p class="mt-3 text-xs text-muted">Website không nhận hoặc lưu số thẻ, ngày hết hạn thẻ, CVV hay OTP; các thông tin này chỉ nhập trực tiếp trên môi trường VNPay.</p>
+        </details>
       </div>
       <p id="revenue-updated-at" class="mt-3 text-xs text-muted"></p>
     </section>
@@ -147,7 +228,7 @@
 
     <section data-admin-panel="premium" class="hidden rounded-xl bg-panel p-5">
       <h2 class="text-xl font-bold">Yêu cầu nâng cấp VIP</h2>
-      <p class="mb-4 mt-1 text-sm text-muted">Chỉ duyệt khi đã xác nhận thanh toán bên ngoài hệ thống. Chức năng thanh toán hiện chỉ dùng để demo.</p>
+      <p class="mb-4 mt-1 text-sm text-muted">Đơn VNPay chỉ tự duyệt sau khi IPN có chữ ký hợp lệ; không duyệt thủ công đơn đang chờ VNPay. Yêu cầu mô phỏng vẫn có thể được Admin xử lý khi Sandbox chưa bật.</p>
       <p class="mb-4 -mt-2 text-sm text-muted">Hiển thị trước 5 yêu cầu mới nhất; mỗi trang xem thêm tối đa 10 yêu cầu.</p>
       <div class="overflow-x-auto"><table class="w-full min-w-[900px] text-left text-sm"><thead class="text-muted"><tr><th class="p-2">Người dùng</th><th class="p-2">Email</th><th class="p-2">Gói</th><th class="p-2">Số tiền</th><th class="p-2">Ngày gửi</th><th class="p-2">Trạng thái</th><th class="p-2">Xử lý</th></tr></thead><tbody id="premium-request-list"></tbody></table></div>
       <div id="premium-request-list-pagination" class="mt-4"></div>
